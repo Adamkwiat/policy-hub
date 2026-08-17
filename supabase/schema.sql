@@ -104,8 +104,7 @@ create trigger documents_set_updated_at
   for each row execute function set_updated_at();
 
 -- ── storage ──────────────────────────────────────────────────────────────
--- Run this after creating the bucket named "policies" (private) in
--- Storage > New bucket in the dashboard.
+-- Creates the private "policies" bucket (no manual dashboard step needed).
 
 insert into storage.buckets (id, name, public)
 values ('policies', 'policies', false)
