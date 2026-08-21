@@ -55,6 +55,8 @@ export default function PoliciesPage() {
   const [formCqcStandard, setFormCqcStandard] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const [previewingDoc, setPreviewingDoc] = useState<Document | null>(null)
+
   const isManager = profile?.role === 'manager'
 
   useEffect(() => {
@@ -227,6 +229,9 @@ export default function PoliciesPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                {doc.content && (
+                  <button onClick={() => setPreviewingDoc(doc)} className="text-blue-600 text-xs font-semibold">Preview</button>
+                )}
                 {signedUrls[doc.id] ? (
                   <a href={signedUrls[doc.id]} target="_blank" rel="noreferrer" className="text-purple-600 text-xs font-semibold">Open</a>
                 ) : (
@@ -288,6 +293,39 @@ export default function PoliciesPage() {
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview modal — shows extracted text, no download required */}
+      {previewingDoc && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center" onClick={() => setPreviewingDoc(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-900 truncate">{previewingDoc.name}</p>
+                <p className="text-xs text-gray-400">{previewingDoc.category}</p>
+              </div>
+              <button onClick={() => setPreviewingDoc(null)} className="text-gray-400 text-lg shrink-0">×</button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{previewingDoc.content}</p>
+            </div>
+            <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 flex gap-2">
+              {signedUrls[previewingDoc.id] && (
+                <a
+                  href={signedUrls[previewingDoc.id]}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-3 text-sm font-semibold text-center"
+                >
+                  Download original
+                </a>
+              )}
+              <button onClick={() => setPreviewingDoc(null)} className="flex-1 bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold">
+                Close
+              </button>
             </div>
           </div>
         </div>
