@@ -7,6 +7,12 @@ import { getCurrentProfile, type Profile } from '@/lib/profile'
 const CATEGORIES = ['Clinical', 'HR', 'Health & Safety', 'Information Governance', 'Safeguarding', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
 
+type AiReview = {
+  standard: string | null
+  assessment: string
+  gaps: string[]
+}
+
 type Document = {
   id: string
   name: string
@@ -16,6 +22,7 @@ type Document = {
   storage_path: string
   cqc_standard: string | null
   content: string | null
+  ai_review: AiReview | null
   uploaded_by: string
   created_at: string
 }
@@ -54,6 +61,8 @@ export default function PoliciesPage() {
   const [formReviewDate, setFormReviewDate] = useState('')
   const [formCqcStandard, setFormCqcStandard] = useState('')
   const [saving, setSaving] = useState(false)
+  const [analysingCqc, setAnalysingCqc] = useState(false)
+  const [aiReview, setAiReview] = useState<AiReview | null>(null)
 
   const [previewingDoc, setPreviewingDoc] = useState<Document | null>(null)
 
@@ -123,8 +132,34 @@ export default function PoliciesPage() {
     setFormOwner('')
     setFormReviewDate('')
     setFormCqcStandard('')
+    setAiReview(null)
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
+
+    if (content.trim()) analyseCqc(content, file.name)
+  }
+
+  async function analyseCqc(content: string, documentName: string) {
+    setAnalysingCqc(true)
+    try {
+      const res = await fetch('/api/check-cqc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, document_name: documentName }),
+      })
+      if (res.ok) {
+        const review: AiReview = await res.json()
+        setAiReview(review)
+        setFormCqcStandard(prev => {
+          if (prev) return prev // manager already picked one manually
+          return review.standard ?? ''
+        })
+      }
+    } catch (e) {
+      console.error('CQC analysis failed:', e)
+    } finally {
+      setAnalysingCqc(false)
+    }
   }
 
   async function saveDocument() {
@@ -141,6 +176,7 @@ export default function PoliciesPage() {
       storage_path: pendingPath,
       cqc_standard: formCqcStandard || null,
       content: pendingContent || null,
+      ai_review: aiReview,
       uploaded_by: user.id,
     })
 
@@ -224,6 +260,11 @@ export default function PoliciesPage() {
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{doc.category}</span>
                     {doc.cqc_standard && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{doc.cqc_standard}</span>}
                     {status && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status.className}`}>{status.label}</span>}
+                    {doc.ai_review && doc.ai_review.gaps.length > 0 && (
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
+                        {doc.ai_review.gaps.length} gap{doc.ai_review.gaps.length !== 1 ? 's' : ''} flagged
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">Owner: {doc.owner} · Review: {formatDate(doc.review_date)}</p>
                 </div>
@@ -282,6 +323,20 @@ export default function PoliciesPage() {
                   <option value="">Not applicable</option>
                   {CQC_STANDARDS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+                {analysingCqc && <p className="text-xs text-gray-400 mt-1.5">Checking against CQC standards...</p>}
+                {!analysingCqc && aiReview && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mt-2 space-y-1.5">
+                    <p className="text-xs font-semibold text-blue-800">
+                      {aiReview.standard ? `AI suggests: ${aiReview.standard}` : "AI didn't find a clear match to any standard"}
+                    </p>
+                    <p className="text-xs text-blue-900">{aiReview.assessment}</p>
+                    {aiReview.gaps.length > 0 && (
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {aiReview.gaps.map((gap, i) => <li key={i} className="text-xs text-blue-900">{gap}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex gap-2 pb-2">
                 <button onClick={() => setPendingFile(null)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
@@ -305,7 +360,25 @@ export default function PoliciesPage() {
               </div>
               <button onClick={() => setPreviewingDoc(null)} className="text-gray-400 text-lg shrink-0">×</button>
             </div>
-            <div className="p-4">
+            <div className="p-4 space-y-4">
+              {previewingDoc.ai_review && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">
+                    CQC check {previewingDoc.ai_review.standard ? `— ${previewingDoc.ai_review.standard}` : ''}
+                  </p>
+                  <p className="text-sm text-blue-900">{previewingDoc.ai_review.assessment}</p>
+                  {previewingDoc.ai_review.gaps.length > 0 ? (
+                    <ul className="list-disc list-inside space-y-1">
+                      {previewingDoc.ai_review.gaps.map((gap, i) => (
+                        <li key={i} className="text-sm text-blue-900">{gap}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
+                  )}
+                  <p className="text-[11px] text-blue-400">AI-assisted suggestion — review before relying on it.</p>
+                </div>
+              )}
               <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{previewingDoc.content}</p>
             </div>
             <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 flex gap-2">
