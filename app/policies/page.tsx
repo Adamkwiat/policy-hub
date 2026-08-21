@@ -63,20 +63,12 @@ export default function PoliciesPage() {
   const [saving, setSaving] = useState(false)
   const [analysingCqc, setAnalysingCqc] = useState(false)
   const [aiReview, setAiReview] = useState<AiReview | null>(null)
-  const [checkCqcEnabled, setCheckCqcEnabled] = useState(true)
-  const checkCqcEnabledRef = useRef(true)
-  const cqcTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cqcAutoFiredRef = useRef(false)
+  const [checkCqcEnabled, setCheckCqcEnabled] = useState(false)
 
   function toggleCheckCqc(checked: boolean) {
     setCheckCqcEnabled(checked)
-    checkCqcEnabledRef.current = checked
-  }
-
-  function clearScheduledCqcCheck() {
-    if (cqcTimeoutRef.current) {
-      clearTimeout(cqcTimeoutRef.current)
-      cqcTimeoutRef.current = null
+    if (checked && !aiReview && !analysingCqc && pendingContent.trim() && pendingFile) {
+      analyseCqc(pendingContent, pendingFile.name)
     }
   }
 
@@ -87,7 +79,6 @@ export default function PoliciesPage() {
   useEffect(() => {
     getCurrentProfile().then(setProfile)
     fetchDocuments()
-    return () => clearScheduledCqcCheck()
   }, [])
 
   async function fetchDocuments() {
@@ -150,22 +141,9 @@ export default function PoliciesPage() {
     setFormReviewDate('')
     setFormCqcStandard('')
     setAiReview(null)
+    setCheckCqcEnabled(false)
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
-
-    toggleCheckCqc(true)
-    cqcAutoFiredRef.current = false
-    clearScheduledCqcCheck()
-
-    if (content.trim()) {
-      // Give the manager a couple of seconds to untick "Check against CQC
-      // standards" before we actually spend an API call, e.g. for a doc
-      // they already know isn't CQC-relevant.
-      cqcTimeoutRef.current = setTimeout(() => {
-        cqcAutoFiredRef.current = true
-        if (checkCqcEnabledRef.current) analyseCqc(content, file.name)
-      }, 2000)
-    }
   }
 
   async function analyseCqc(content: string, documentName: string) {
@@ -194,7 +172,6 @@ export default function PoliciesPage() {
   async function saveDocument() {
     if (!pendingFile) return
     setSaving(true)
-    clearScheduledCqcCheck()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -384,17 +361,9 @@ export default function PoliciesPage() {
                   </div>
                 )}
 
-                {checkCqcEnabled && !analysingCqc && !aiReview && cqcAutoFiredRef.current && pendingContent.trim() && (
-                  <button
-                    onClick={() => analyseCqc(pendingContent, pendingFile.name)}
-                    className="text-xs text-purple-600 font-semibold mt-1.5"
-                  >
-                    Check against CQC standards now
-                  </button>
-                )}
               </div>
               <div className="flex gap-2 pb-2">
-                <button onClick={() => { clearScheduledCqcCheck(); setPendingFile(null) }} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
+                <button onClick={() => setPendingFile(null)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
                 <button onClick={saveDocument} disabled={saving} className="flex-1 bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save'}
                 </button>
