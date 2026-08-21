@@ -64,6 +64,7 @@ export default function PoliciesPage() {
   const [analysingCqc, setAnalysingCqc] = useState(false)
   const [aiReview, setAiReview] = useState<AiReview | null>(null)
   const [checkCqcEnabled, setCheckCqcEnabled] = useState(false)
+  const [checkingDocId, setCheckingDocId] = useState<string | null>(null)
 
   function toggleCheckCqc(checked: boolean) {
     setCheckCqcEnabled(checked)
@@ -198,6 +199,29 @@ export default function PoliciesPage() {
     await fetchDocuments()
   }
 
+  async function checkExistingDocument(doc: Document) {
+    if (!doc.content) return
+    setCheckingDocId(doc.id)
+    setError('')
+    try {
+      const res = await fetch('/api/check-cqc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: doc.content, document_name: doc.name }),
+      })
+      if (!res.ok) { setError('CQC check failed for this document.'); return }
+
+      const review: AiReview = await res.json()
+      const updates: { ai_review: AiReview; cqc_standard?: string } = { ai_review: review }
+      if (!doc.cqc_standard && review.standard) updates.cqc_standard = review.standard // don't overwrite an existing manual tag
+
+      await supabase.from('documents').update(updates).eq('id', doc.id)
+      await fetchDocuments()
+    } finally {
+      setCheckingDocId(null)
+    }
+  }
+
   async function deleteDocument(doc: Document) {
     await supabase.storage.from('policies').remove([doc.storage_path])
     await supabase.from('documents').delete().eq('id', doc.id)
@@ -281,6 +305,15 @@ export default function PoliciesPage() {
                   <button onClick={() => setPreviewingDoc(doc)} className="text-blue-600 text-xs font-semibold">Preview</button>
                 )}
                 <a href={`/policies/${doc.id}/view`} target="_blank" rel="noreferrer" className="text-purple-600 text-xs font-semibold">Open</a>
+                {isManager && doc.content && (
+                  <button
+                    onClick={() => checkExistingDocument(doc)}
+                    disabled={checkingDocId === doc.id}
+                    className="text-blue-600 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {checkingDocId === doc.id ? 'Checking...' : doc.ai_review ? 'Re-check CQC' : 'Check CQC'}
+                  </button>
+                )}
                 {isManager && (
                   <button onClick={() => deleteDocument(doc)} className="text-red-400 text-xs font-semibold ml-auto">Delete</button>
                 )}
