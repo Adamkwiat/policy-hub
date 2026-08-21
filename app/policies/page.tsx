@@ -232,11 +232,7 @@ export default function PoliciesPage() {
                 {doc.content && (
                   <button onClick={() => setPreviewingDoc(doc)} className="text-blue-600 text-xs font-semibold">Preview</button>
                 )}
-                {signedUrls[doc.id] ? (
-                  <a href={signedUrls[doc.id]} target="_blank" rel="noreferrer" className="text-purple-600 text-xs font-semibold">Open</a>
-                ) : (
-                  <span className="text-gray-300 text-xs">Loading...</span>
-                )}
+                <a href={`/policies/${doc.id}/view`} target="_blank" rel="noreferrer" className="text-purple-600 text-xs font-semibold">Open</a>
                 {isManager && (
                   <button onClick={() => deleteDocument(doc)} className="text-red-400 text-xs font-semibold ml-auto">Delete</button>
                 )}
