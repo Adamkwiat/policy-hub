@@ -63,6 +63,22 @@ export default function PoliciesPage() {
   const [saving, setSaving] = useState(false)
   const [analysingCqc, setAnalysingCqc] = useState(false)
   const [aiReview, setAiReview] = useState<AiReview | null>(null)
+  const [checkCqcEnabled, setCheckCqcEnabled] = useState(true)
+  const checkCqcEnabledRef = useRef(true)
+  const cqcTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cqcAutoFiredRef = useRef(false)
+
+  function toggleCheckCqc(checked: boolean) {
+    setCheckCqcEnabled(checked)
+    checkCqcEnabledRef.current = checked
+  }
+
+  function clearScheduledCqcCheck() {
+    if (cqcTimeoutRef.current) {
+      clearTimeout(cqcTimeoutRef.current)
+      cqcTimeoutRef.current = null
+    }
+  }
 
   const [previewingDoc, setPreviewingDoc] = useState<Document | null>(null)
 
@@ -71,6 +87,7 @@ export default function PoliciesPage() {
   useEffect(() => {
     getCurrentProfile().then(setProfile)
     fetchDocuments()
+    return () => clearScheduledCqcCheck()
   }, [])
 
   async function fetchDocuments() {
@@ -136,7 +153,19 @@ export default function PoliciesPage() {
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
 
-    if (content.trim()) analyseCqc(content, file.name)
+    toggleCheckCqc(true)
+    cqcAutoFiredRef.current = false
+    clearScheduledCqcCheck()
+
+    if (content.trim()) {
+      // Give the manager a couple of seconds to untick "Check against CQC
+      // standards" before we actually spend an API call, e.g. for a doc
+      // they already know isn't CQC-relevant.
+      cqcTimeoutRef.current = setTimeout(() => {
+        cqcAutoFiredRef.current = true
+        if (checkCqcEnabledRef.current) analyseCqc(content, file.name)
+      }, 2000)
+    }
   }
 
   async function analyseCqc(content: string, documentName: string) {
@@ -165,6 +194,7 @@ export default function PoliciesPage() {
   async function saveDocument() {
     if (!pendingFile) return
     setSaving(true)
+    clearScheduledCqcCheck()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -176,7 +206,7 @@ export default function PoliciesPage() {
       storage_path: pendingPath,
       cqc_standard: formCqcStandard || null,
       content: pendingContent || null,
-      ai_review: aiReview,
+      ai_review: checkCqcEnabled ? aiReview : null,
       uploaded_by: user.id,
     })
 
@@ -323,8 +353,24 @@ export default function PoliciesPage() {
                   <option value="">Not applicable</option>
                   {CQC_STANDARDS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                {analysingCqc && <p className="text-xs text-gray-400 mt-1.5">Checking against CQC standards...</p>}
-                {!analysingCqc && aiReview && (
+
+                {pendingContent.trim() && (
+                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checkCqcEnabled}
+                      onChange={e => toggleCheckCqc(e.target.checked)}
+                      className="w-4 h-4 accent-purple-600"
+                    />
+                    <span className="text-xs text-gray-600">Check against CQC standards</span>
+                  </label>
+                )}
+
+                {checkCqcEnabled && analysingCqc && (
+                  <p className="text-xs text-gray-400 mt-1.5">Checking against CQC standards...</p>
+                )}
+
+                {checkCqcEnabled && !analysingCqc && aiReview && (
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mt-2 space-y-1.5">
                     <p className="text-xs font-semibold text-blue-800">
                       {aiReview.standard ? `AI suggests: ${aiReview.standard}` : "AI didn't find a clear match to any standard"}
@@ -337,9 +383,18 @@ export default function PoliciesPage() {
                     )}
                   </div>
                 )}
+
+                {checkCqcEnabled && !analysingCqc && !aiReview && cqcAutoFiredRef.current && pendingContent.trim() && (
+                  <button
+                    onClick={() => analyseCqc(pendingContent, pendingFile.name)}
+                    className="text-xs text-purple-600 font-semibold mt-1.5"
+                  >
+                    Check against CQC standards now
+                  </button>
+                )}
               </div>
               <div className="flex gap-2 pb-2">
-                <button onClick={() => setPendingFile(null)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
+                <button onClick={() => { clearScheduledCqcCheck(); setPendingFile(null) }} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
                 <button onClick={saveDocument} disabled={saving} className="flex-1 bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save'}
                 </button>
