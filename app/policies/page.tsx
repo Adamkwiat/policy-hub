@@ -243,7 +243,7 @@ export default function PoliciesPage() {
 
       {/* New upload details form */}
       {pendingFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-end justify-center">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center">
           <div className="bg-white rounded-t-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-4">
               <p className="font-semibold text-gray-900">Tag this policy</p>
