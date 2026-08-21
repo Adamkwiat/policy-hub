@@ -18,7 +18,7 @@ export default function Login() {
   async function handleLogin() {
     setLoading(true)
     setError('')
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     if (error) {
       setError(error.message)
       setLoading(false)
@@ -34,7 +34,7 @@ export default function Login() {
     }
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
     })
     if (error) {
@@ -50,7 +50,7 @@ export default function Login() {
     if (!username.trim()) { setError('Please enter a username.'); return }
     setLoading(true)
     setError('')
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({ email: email.trim(), password })
     if (error) {
       setError(error.message)
       setLoading(false)
