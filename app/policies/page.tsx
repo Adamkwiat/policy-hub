@@ -235,7 +235,8 @@ export default function PoliciesPage() {
     <main className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
         <a href="/" className="text-gray-500 text-sm">← Back</a>
-        <h1 className="text-xl font-semibold text-gray-900">Policies & SOPs</h1>
+        <h1 className="text-xl font-semibold text-gray-900 flex-1">Policies & SOPs</h1>
+        <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold shrink-0">CQC Standards</a>
       </div>
 
       <div className="p-4 space-y-3">

@@ -1,18 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { cqcStandardGuidanceText, cqcStandardNames } from '@/lib/cqcStandards'
 
 export const maxDuration = 60
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led'] as const
-
-const STANDARD_GUIDANCE = `
-- Safe: protects people from abuse and avoidable harm. Covers safeguarding, safe recruitment, medicines management, infection prevention and control, and incident reporting/learning from mistakes.
-- Effective: care and treatment achieves good outcomes, based on best available evidence. Covers staff training/competence, consent, and monitoring outcomes.
-- Caring: staff treat people with compassion, dignity, respect, and involve them in decisions about their care.
-- Responsive: services are organised to meet people's needs. Covers access, flexibility, and how complaints are handled and acted on.
-- Well-led: leadership, management and governance assure the delivery of high-quality care. Covers risk management, accountability, and a culture of learning and improvement.
-`.trim()
+const STANDARDS = cqcStandardNames()
+const STANDARD_GUIDANCE = cqcStandardGuidanceText()
 
 export async function POST(request: Request) {
   const { content, document_name } = await request.json()
