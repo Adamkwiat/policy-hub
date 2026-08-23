@@ -215,7 +215,10 @@ export default function PoliciesPage() {
       const updates: { ai_review: AiReview; cqc_standard?: string } = { ai_review: review }
       if (!doc.cqc_standard && review.standard) updates.cqc_standard = review.standard // don't overwrite an existing manual tag
 
-      await supabase.from('documents').update(updates).eq('id', doc.id)
+      const { data: updated, error: updateError } = await supabase.from('documents').update(updates).eq('id', doc.id).select()
+      if (updateError) { setError(`Could not save CQC check: ${updateError.message}`); return }
+      if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); return }
+
       await fetchDocuments()
     } finally {
       setCheckingDocId(null)
@@ -292,9 +295,28 @@ export default function PoliciesPage() {
                     {doc.cqc_standard && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{doc.cqc_standard}</span>}
                     {status && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status.className}`}>{status.label}</span>}
                     {doc.ai_review && doc.ai_review.gaps.length > 0 && (
-                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                        {doc.ai_review.gaps.length} gap{doc.ai_review.gaps.length !== 1 ? 's' : ''} flagged
-                      </span>
+                      <button
+                        onClick={() => setPreviewingDoc(doc)}
+                        className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold"
+                      >
+                        {doc.ai_review.gaps.length} gap{doc.ai_review.gaps.length !== 1 ? 's' : ''} flagged — view
+                      </button>
+                    )}
+                    {doc.ai_review && doc.ai_review.gaps.length === 0 && doc.ai_review.standard && (
+                      <button
+                        onClick={() => setPreviewingDoc(doc)}
+                        className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold"
+                      >
+                        CQC checked — no gaps
+                      </button>
+                    )}
+                    {doc.ai_review && !doc.ai_review.standard && (
+                      <button
+                        onClick={() => setPreviewingDoc(doc)}
+                        className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold"
+                      >
+                        CQC checked — not clearly relevant
+                      </button>
                     )}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">Owner: {doc.owner} · Review: {formatDate(doc.review_date)}</p>
