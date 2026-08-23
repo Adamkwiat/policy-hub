@@ -1,4 +1,5 @@
 import { CQC_FUNDAMENTAL_STANDARDS } from '@/lib/cqcStandards'
+import { OTHER_REFERENCE_SOURCES } from '@/lib/practiceAreas'
 
 export default function CqcStandardsReference() {
   return (
@@ -35,6 +36,29 @@ export default function CqcStandardsReference() {
             </div>
           </div>
         ))}
+
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-3">
+          <div>
+            <h2 className="font-semibold text-gray-900">Other reference sources</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Static links for further reading — not queried by the AI, just useful bodies to know about for practice policies.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {OTHER_REFERENCE_SOURCES.map(source => (
+              <a
+                key={source.name}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block border border-gray-100 rounded-lg p-2.5 hover:bg-gray-50"
+              >
+                <p className="text-sm font-semibold text-blue-600">{source.name}</p>
+                <p className="text-xs text-gray-500">{source.note}</p>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </main>
   )

@@ -236,6 +236,7 @@ export default function PoliciesPage() {
       <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
         <a href="/" className="text-gray-500 text-sm">← Back</a>
         <h1 className="text-xl font-semibold text-gray-900 flex-1">Policies & SOPs</h1>
+        {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold shrink-0">Gap Analysis</a>}
         <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold shrink-0">CQC Standards</a>
       </div>
 
