@@ -13,13 +13,15 @@ export async function POST(request: Request) {
 
   if (!content?.trim()) return Response.json({ error: 'No content' }, { status: 400 })
 
-  const message = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `You are helping a GP practice manager check a policy document against the CQC (Care Quality Commission) fundamental standards, which every GP practice in England is regulated against.
+  let message
+  try {
+    message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: `You are helping a GP practice manager check a policy document against the CQC (Care Quality Commission) fundamental standards, which every GP practice in England is regulated against.
 
 The five standards are:
 ${STANDARD_GUIDANCE}
@@ -36,9 +38,13 @@ Respond with ONLY valid JSON, no other text, in this exact shape:
 
 Document:
 ${content.slice(0, 15000)}`,
-      },
-    ],
-  })
+        },
+      ],
+    })
+  } catch (e) {
+    console.error('CQC check API error:', e)
+    return Response.json({ error: e instanceof Error ? e.message : 'Anthropic API call failed' }, { status: 502 })
+  }
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
 

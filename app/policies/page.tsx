@@ -162,9 +162,12 @@ export default function PoliciesPage() {
           if (prev) return prev // manager already picked one manually
           return review.standard ?? ''
         })
+      } else {
+        const body = await res.json().catch(() => null)
+        setError(`CQC check failed: ${body?.error ?? res.statusText}`)
       }
     } catch (e) {
-      console.error('CQC analysis failed:', e)
+      setError(`CQC check failed: ${e instanceof Error ? e.message : 'unknown error'}`)
     } finally {
       setAnalysingCqc(false)
     }

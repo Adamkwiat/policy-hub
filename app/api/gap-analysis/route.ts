@@ -20,13 +20,15 @@ export async function POST(request: Request) {
     ? documents.map(d => `- "${d.name}" — category: ${d.category}, CQC standard: ${d.cqc_standard ?? 'none set'}`).join('\n')
     : '(no policies uploaded yet)'
 
-  const message = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
-    messages: [
-      {
-        role: 'user',
-        content: `You are helping a GP practice manager spot gaps in their policy library, compared against a general checklist of policy areas commonly expected of a CQC-regulated GP practice in England.
+  let message
+  try {
+    message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [
+        {
+          role: 'user',
+          content: `You are helping a GP practice manager spot gaps in their policy library, compared against a general checklist of policy areas commonly expected of a CQC-regulated GP practice in England.
 
 Checklist of expected policy areas:
 ${checklistText}
@@ -40,9 +42,13 @@ For every area that looks uncovered, write a short, concrete 1-2 sentence sugges
 
 Respond with ONLY valid JSON, no other text, in this exact shape:
 {"gaps": [{"area": "string", "standard": "string", "suggestion": "string"}], "coveredAreas": ["string", ...]}`,
-      },
-    ],
-  })
+        },
+      ],
+    })
+  } catch (e) {
+    console.error('Gap analysis API error:', e)
+    return Response.json({ error: e instanceof Error ? e.message : 'Anthropic API call failed' }, { status: 502 })
+  }
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
 

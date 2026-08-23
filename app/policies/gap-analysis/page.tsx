@@ -40,7 +40,11 @@ export default function GapAnalysisPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents }),
       })
-      if (!res.ok) { setError('Gap analysis failed. Please try again.'); return }
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        setError(`Gap analysis failed: ${body?.error ?? res.statusText}`)
+        return
+      }
       setResult(await res.json())
     } finally {
       setAnalysing(false)
