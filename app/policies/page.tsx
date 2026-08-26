@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
+import { formatDate, reviewStatus } from '@/lib/documents'
 
 const CATEGORIES = ['Clinical', 'HR', 'Health & Safety', 'Information Governance', 'Safeguarding', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
@@ -25,21 +26,6 @@ type Document = {
   ai_review: AiReview | null
   uploaded_by: string
   created_at: string
-}
-
-function formatDate(str: string | null) {
-  if (!str) return '—'
-  return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function reviewStatus(reviewDate: string | null) {
-  if (!reviewDate) return null
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const due = new Date(reviewDate + 'T00:00:00')
-  const daysLeft = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-  if (daysLeft < 0) return { label: 'Overdue', className: 'bg-red-100 text-red-700' }
-  if (daysLeft <= 30) return { label: 'Due soon', className: 'bg-amber-100 text-amber-700' }
-  return null
 }
 
 export default function PoliciesPage() {
@@ -339,11 +325,16 @@ export default function PoliciesPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
-        <a href="/" className="text-gray-500 text-sm">← Back</a>
-        <h1 className="text-xl font-semibold text-gray-900 flex-1">Policies & SOPs</h1>
-        {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold shrink-0">Gap Analysis</a>}
-        <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold shrink-0">CQC Standards</a>
+      <div className="bg-white border-b border-gray-200 px-4 py-4 space-y-2">
+        <div className="flex items-center gap-3">
+          <a href="/" className="text-gray-500 text-sm">← Back</a>
+          <h1 className="text-xl font-semibold text-gray-900 flex-1">Policies & SOPs</h1>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <a href="/policies/review-schedule" className="text-xs text-teal-600 font-semibold">Review Schedule</a>
+          {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold">Gap Analysis</a>}
+          <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold">CQC Standards</a>
+        </div>
       </div>
 
       <div className="p-4 space-y-3">
