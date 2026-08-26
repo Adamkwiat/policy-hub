@@ -5,12 +5,14 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
 
 type DocSummary = { name: string; category: string; cqc_standard: string | null }
+type ReferenceDoc = { name: string; content: string | null }
 type Gap = { area: string; standard: string; suggestion: string }
 type Result = { gaps: Gap[]; coveredAreas: string[] }
 
 export default function GapAnalysisPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [documents, setDocuments] = useState<DocSummary[]>([])
+  const [referenceDocs, setReferenceDocs] = useState<ReferenceDoc[]>([])
   const [loadingDocs, setLoadingDocs] = useState(true)
   const [analysing, setAnalysing] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
@@ -25,8 +27,12 @@ export default function GapAnalysisPage() {
 
   async function fetchDocuments() {
     setLoadingDocs(true)
-    const { data } = await supabase.from('documents').select('name, category, cqc_standard')
-    setDocuments(data ?? [])
+    const [{ data: docs }, { data: refDocs }] = await Promise.all([
+      supabase.from('documents').select('name, category, cqc_standard'),
+      supabase.from('reference_documents').select('name, content'),
+    ])
+    setDocuments(docs ?? [])
+    setReferenceDocs(refDocs ?? [])
     setLoadingDocs(false)
   }
 
@@ -38,7 +44,7 @@ export default function GapAnalysisPage() {
       const res = await fetch('/api/gap-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents }),
+        body: JSON.stringify({ documents, referenceDocuments: referenceDocs }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)
@@ -73,7 +79,8 @@ export default function GapAnalysisPage() {
               </p>
               <p className="text-xs text-blue-700">
                 It's a first-pass, name-and-tag-level check — not a deep read of every document's content. See{' '}
-                <a href="/cqc-standards" className="underline font-semibold">CQC Standards Reference</a> for the checklist basis.
+                <a href="/cqc-standards" className="underline font-semibold">CQC Standards Reference</a> for the checklist basis
+                {referenceDocs.length > 0 && <> and to manage your {referenceDocs.length} uploaded reference document{referenceDocs.length !== 1 ? 's' : ''}, which are included in this check</>}.
               </p>
             </div>
 
@@ -84,7 +91,7 @@ export default function GapAnalysisPage() {
               disabled={loadingDocs || analysing}
               className="w-full bg-purple-600 text-white rounded-xl py-3 font-semibold text-sm disabled:opacity-50"
             >
-              {analysing ? 'Analysing...' : `Run gap analysis (${documents.length} polic${documents.length === 1 ? 'y' : 'ies'})`}
+              {analysing ? 'Analysing...' : `Run gap analysis (${documents.length} polic${documents.length === 1 ? 'y' : 'ies'}${referenceDocs.length > 0 ? `, ${referenceDocs.length} reference doc${referenceDocs.length !== 1 ? 's' : ''}` : ''})`}
             </button>
 
             {result && (

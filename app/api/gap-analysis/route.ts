@@ -6,9 +6,16 @@ export const maxDuration = 60
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 type DocSummary = { name: string; category: string; cqc_standard: string | null }
+type ReferenceDoc = { name: string; content: string | null }
+
+const MAX_REFERENCE_CHARS_PER_DOC = 8000
+const MAX_REFERENCE_CHARS_TOTAL = 40000
 
 export async function POST(request: Request) {
-  const { documents } = await request.json() as { documents: DocSummary[] }
+  const { documents, referenceDocuments } = await request.json() as {
+    documents: DocSummary[]
+    referenceDocuments?: ReferenceDoc[]
+  }
 
   if (!Array.isArray(documents)) return Response.json({ error: 'No documents provided' }, { status: 400 })
 
@@ -20,6 +27,15 @@ export async function POST(request: Request) {
     ? documents.map(d => `- "${d.name}" — category: ${d.category}, CQC standard: ${d.cqc_standard ?? 'none set'}`).join('\n')
     : '(no policies uploaded yet)'
 
+  let referenceText = ''
+  let usedChars = 0
+  for (const doc of referenceDocuments ?? []) {
+    if (!doc.content?.trim() || usedChars >= MAX_REFERENCE_CHARS_TOTAL) continue
+    const chunk = doc.content.slice(0, MAX_REFERENCE_CHARS_PER_DOC)
+    referenceText += `\n\n--- "${doc.name}" ---\n${chunk}`
+    usedChars += chunk.length
+  }
+
   let message
   try {
     message = await anthropic.messages.create({
@@ -28,15 +44,15 @@ export async function POST(request: Request) {
       messages: [
         {
           role: 'user',
-          content: `You are helping a GP practice manager spot gaps in their policy library, compared against a general checklist of policy areas commonly expected of a CQC-regulated GP practice in England.
+          content: `You are helping a GP practice manager spot gaps in their policy library, compared against a general checklist of policy areas commonly expected of a CQC-regulated GP practice in England${referenceText ? ", plus the practice's own reference document(s) below" : ''}.
 
 Checklist of expected policy areas:
 ${checklistText}
-
+${referenceText ? `\nThe practice has also uploaded their own reference document(s) -- treat these as an additional, practice-specific source of expected areas alongside the checklist above. If they list specific requirements not already in the checklist, include those too when identifying gaps.${referenceText}\n` : ''}
 Policies currently uploaded to the practice's library (you only have their name, category, and CQC standard tag -- not their full content):
 ${docsText}
 
-For each checklist area, judge from the document names/categories/tags alone whether it looks reasonably covered by an existing policy. Be reasonably generous with matching (e.g. a policy literally named "Infection Control" covers "Infection prevention and control"), but don't assume something is covered just because it's plausible -- if there's no document that clearly relates to an area, treat it as a gap.
+For each expected area (from the checklist, and from the reference document(s) if provided), judge from the document names/categories/tags alone whether it looks reasonably covered by an existing policy. Be reasonably generous with matching (e.g. a policy literally named "Infection Control" covers "Infection prevention and control"), but don't assume something is covered just because it's plausible -- if there's no document that clearly relates to an area, treat it as a gap.
 
 For every area that looks uncovered, write a short, concrete 1-2 sentence suggestion of what such a policy should address for a GP practice.
 
