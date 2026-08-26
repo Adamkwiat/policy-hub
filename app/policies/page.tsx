@@ -75,6 +75,14 @@ export default function PoliciesPage() {
 
   const [previewingDoc, setPreviewingDoc] = useState<Document | null>(null)
 
+  // Edit form state (existing document)
+  const [editingDoc, setEditingDoc] = useState<Document | null>(null)
+  const [editCategory, setEditCategory] = useState(CATEGORIES[0])
+  const [editOwner, setEditOwner] = useState('')
+  const [editReviewDate, setEditReviewDate] = useState('')
+  const [editCqcStandard, setEditCqcStandard] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
   const isManager = profile?.role === 'manager'
 
   useEffect(() => {
@@ -228,6 +236,38 @@ export default function PoliciesPage() {
     }
   }
 
+  function openEdit(doc: Document) {
+    setEditingDoc(doc)
+    setEditCategory(doc.category)
+    setEditOwner(doc.owner)
+    setEditReviewDate(doc.review_date ?? '')
+    setEditCqcStandard(doc.cqc_standard ?? '')
+  }
+
+  async function saveEdit() {
+    if (!editingDoc) return
+    setEditSaving(true)
+    setError('')
+
+    const { data: updated, error: updateError } = await supabase
+      .from('documents')
+      .update({
+        category: editCategory,
+        owner: editOwner.trim() || editingDoc.owner,
+        review_date: editReviewDate || null,
+        cqc_standard: editCqcStandard || null,
+      })
+      .eq('id', editingDoc.id)
+      .select()
+
+    if (updateError) { setError(`Save failed: ${updateError.message}`); setEditSaving(false); return }
+    if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); setEditSaving(false); return }
+
+    setEditingDoc(null)
+    setEditSaving(false)
+    await fetchDocuments()
+  }
+
   async function deleteDocument(doc: Document) {
     await supabase.storage.from('policies').remove([doc.storage_path])
     await supabase.from('documents').delete().eq('id', doc.id)
@@ -342,6 +382,9 @@ export default function PoliciesPage() {
                   </button>
                 )}
                 {isManager && (
+                  <button onClick={() => openEdit(doc)} className="text-gray-500 text-xs font-semibold">Edit</button>
+                )}
+                {isManager && (
                   <button onClick={() => deleteDocument(doc)} className="text-red-400 text-xs font-semibold ml-auto">Delete</button>
                 )}
               </div>
@@ -426,6 +469,57 @@ export default function PoliciesPage() {
                 <button onClick={() => setPendingFile(null)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
                 <button onClick={saveDocument} disabled={saving} className="flex-1 bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit details modal (existing document) */}
+      {editingDoc && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center" onClick={() => setEditingDoc(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-4">
+              <p className="font-semibold text-gray-900">Edit policy details</p>
+              <p className="text-xs text-gray-400 truncate">{editingDoc.name}</p>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-sm font-semibold text-gray-700 block mb-1">Category</label>
+                <select value={editCategory} onChange={e => setEditCategory(e.target.value)} className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900">
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-700 block mb-1">Owner</label>
+                <input
+                  type="text"
+                  value={editOwner}
+                  onChange={e => setEditOwner(e.target.value)}
+                  className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-700 block mb-1">Review date</label>
+                <input
+                  type="date"
+                  value={editReviewDate}
+                  onChange={e => setEditReviewDate(e.target.value)}
+                  className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-700 block mb-1">CQC standard</label>
+                <select value={editCqcStandard} onChange={e => setEditCqcStandard(e.target.value)} className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900">
+                  <option value="">Not applicable</option>
+                  {CQC_STANDARDS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2 pb-2">
+                <button onClick={() => setEditingDoc(null)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-semibold">Cancel</button>
+                <button onClick={saveEdit} disabled={editSaving} className="flex-1 bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+                  {editSaving ? 'Saving...' : 'Save changes'}
                 </button>
               </div>
             </div>
