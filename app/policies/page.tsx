@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
 import { formatDate, reviewStatus } from '@/lib/documents'
+import { logAction } from '@/lib/audit'
+import PolicyHubNav from '@/components/PolicyHubNav'
 
 const CATEGORIES = ['Clinical', 'HR', 'Health & Safety', 'Information Governance', 'Safeguarding', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
@@ -196,6 +198,8 @@ export default function PoliciesPage() {
       return
     }
 
+    await logAction({ action: 'upload_document', resourceType: 'document', resourceName: pendingFile.name })
+
     setPendingFile(null)
     setSaving(false)
     await fetchDocuments()
@@ -221,6 +225,7 @@ export default function PoliciesPage() {
       if (updateError) { setError(`Could not save CQC check: ${updateError.message}`); return }
       if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); return }
 
+      await logAction({ action: 'check_cqc', resourceType: 'document', resourceName: doc.name })
       await fetchDocuments()
     } finally {
       setCheckingDocId(null)
@@ -280,6 +285,8 @@ export default function PoliciesPage() {
 
     await supabase.storage.from('policies').remove([target.storage_path])
 
+    await logAction({ action: 'replace_document', resourceType: 'document', resourceName: file.name })
+
     setReplacing(false)
     setReplacingDoc(null)
     await fetchDocuments()
@@ -312,6 +319,8 @@ export default function PoliciesPage() {
     if (updateError) { setError(`Save failed: ${updateError.message}`); setEditSaving(false); return }
     if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); setEditSaving(false); return }
 
+    await logAction({ action: 'edit_document', resourceType: 'document', resourceName: editingDoc.name })
+
     setEditingDoc(null)
     setEditSaving(false)
     await fetchDocuments()
@@ -320,6 +329,7 @@ export default function PoliciesPage() {
   async function deleteDocument(doc: Document) {
     await supabase.storage.from('policies').remove([doc.storage_path])
     await supabase.from('documents').delete().eq('id', doc.id)
+    await logAction({ action: 'delete_document', resourceType: 'document', resourceName: doc.name })
     setDocuments(prev => prev.filter(d => d.id !== doc.id))
   }
 
@@ -330,11 +340,7 @@ export default function PoliciesPage() {
           <a href="/" className="text-gray-500 text-sm">← Back</a>
           <h1 className="text-xl font-semibold text-gray-900 flex-1">Policies & SOPs</h1>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <a href="/policies/review-schedule" className="text-xs text-teal-600 font-semibold">Review Schedule</a>
-          {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold">Gap Analysis</a>}
-          <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold">CQC Standards</a>
-        </div>
+        <PolicyHubNav />
       </div>
 
       <div className="p-4 space-y-3">

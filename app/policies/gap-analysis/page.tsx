@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
+import { logAction } from '@/lib/audit'
+import PolicyHubNav from '@/components/PolicyHubNav'
 
 type DocSummary = { name: string; category: string; cqc_standard: string | null }
 type ReferenceDoc = { name: string; content: string | null }
@@ -52,6 +54,7 @@ export default function GapAnalysisPage() {
         return
       }
       setResult(await res.json())
+      await logAction({ action: 'run_gap_analysis', resourceType: 'gap_analysis', resourceName: `${documents.length} policies` })
     } finally {
       setAnalysing(false)
     }
@@ -59,9 +62,12 @@ export default function GapAnalysisPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
-        <a href="/policies" className="text-gray-500 text-sm">← Back</a>
-        <h1 className="text-xl font-semibold text-gray-900">Gap Analysis</h1>
+      <div className="bg-white border-b border-gray-200 px-4 py-4 space-y-2">
+        <div className="flex items-center gap-3">
+          <a href="/policies" className="text-gray-500 text-sm">← Back</a>
+          <h1 className="text-xl font-semibold text-gray-900">Gap Analysis</h1>
+        </div>
+        <PolicyHubNav />
       </div>
 
       <div className="p-4 space-y-4">

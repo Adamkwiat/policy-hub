@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
 import { CQC_FUNDAMENTAL_STANDARDS } from '@/lib/cqcStandards'
 import { OTHER_REFERENCE_SOURCES } from '@/lib/practiceAreas'
+import PolicyHubNav from '@/components/PolicyHubNav'
 
 type ReferenceDoc = {
   id: string
@@ -82,9 +83,12 @@ export default function CqcStandardsReference() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
-        <a href="/policies" className="text-gray-500 text-sm">← Back</a>
-        <h1 className="text-xl font-semibold text-gray-900">CQC Standards Reference</h1>
+      <div className="bg-white border-b border-gray-200 px-4 py-4 space-y-2">
+        <div className="flex items-center gap-3">
+          <a href="/policies" className="text-gray-500 text-sm">← Back</a>
+          <h1 className="text-xl font-semibold text-gray-900">CQC Standards Reference</h1>
+        </div>
+        <PolicyHubNav />
       </div>
 
       <div className="p-4 space-y-4">
