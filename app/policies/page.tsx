@@ -83,6 +83,11 @@ export default function PoliciesPage() {
   const [editCqcStandard, setEditCqcStandard] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
+  // Replace file (existing document)
+  const replaceFileInputRef = useRef<HTMLInputElement>(null)
+  const [replacingDoc, setReplacingDoc] = useState<Document | null>(null)
+  const [replacing, setReplacing] = useState(false)
+
   const isManager = profile?.role === 'manager'
 
   useEffect(() => {
@@ -236,6 +241,64 @@ export default function PoliciesPage() {
     }
   }
 
+  function triggerReplace(doc: Document) {
+    setReplacingDoc(doc)
+    setError('')
+    replaceFileInputRef.current?.click()
+  }
+
+  async function handleReplaceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const target = replacingDoc
+    if (replaceFileInputRef.current) replaceFileInputRef.current.value = ''
+    if (!file || !target) return
+    if (file.size > 50 * 1024 * 1024) { setError('File must be under 50 MB'); setReplacingDoc(null); return }
+
+    setReplacing(true)
+    setError('')
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setReplacing(false); return }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
+    const newPath = `${user.id}/${Date.now()}-${safeName}`
+
+    const { error: uploadError } = await supabase.storage.from('policies').upload(newPath, file)
+    if (uploadError) { setError(`Upload failed: ${uploadError.message}`); setReplacing(false); setReplacingDoc(null); return }
+
+    let content = ''
+    const nameLower = file.name.toLowerCase()
+    if (nameLower.endsWith('.pdf') || nameLower.endsWith('.docx')) {
+      const extractForm = new FormData()
+      extractForm.append('file', file)
+      const extractRes = await fetch('/api/extract-text', { method: 'POST', body: extractForm })
+      if (extractRes.ok) content = (await extractRes.json()).text ?? ''
+    }
+
+    // New file, new content -- the old AI review no longer reflects what's actually in the document.
+    const { data: updated, error: updateError } = await supabase
+      .from('documents')
+      .update({ name: file.name, storage_path: newPath, content: content || null, ai_review: null })
+      .eq('id', target.id)
+      .select()
+
+    if (updateError) { setError(`Could not save replacement: ${updateError.message}`); setReplacing(false); setReplacingDoc(null); return }
+    if (!updated || updated.length === 0) {
+      // Roll back the just-uploaded file since the DB row was never pointed at it
+      await supabase.storage.from('policies').remove([newPath])
+      setError("Update didn't apply — you may not have manager permissions on this document.")
+      setReplacing(false)
+      setReplacingDoc(null)
+      return
+    }
+
+    await supabase.storage.from('policies').remove([target.storage_path])
+
+    setReplacing(false)
+    setReplacingDoc(null)
+    await fetchDocuments()
+  }
+
   function openEdit(doc: Document) {
     setEditingDoc(doc)
     setEditCategory(doc.category)
@@ -318,6 +381,7 @@ export default function PoliciesPage() {
             <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="w-full bg-purple-600 text-white rounded-xl py-3 font-semibold text-sm disabled:opacity-50">
               {uploading ? 'Uploading...' : '+ Upload Policy'}
             </button>
+            <input ref={replaceFileInputRef} type="file" className="hidden" onChange={handleReplaceFileChange} accept=".pdf,.docx,.doc" />
           </>
         )}
 
@@ -381,13 +445,20 @@ export default function PoliciesPage() {
                     {checkingDocId === doc.id ? 'Checking...' : doc.ai_review ? 'Re-check CQC' : 'Check CQC'}
                   </button>
                 )}
-                {isManager && (
-                  <button onClick={() => openEdit(doc)} className="text-gray-500 text-xs font-semibold">Edit</button>
-                )}
-                {isManager && (
-                  <button onClick={() => deleteDocument(doc)} className="text-red-400 text-xs font-semibold ml-auto">Delete</button>
-                )}
               </div>
+              {isManager && (
+                <div className="flex items-center gap-3 mt-2">
+                  <button onClick={() => openEdit(doc)} className="text-gray-500 text-xs font-semibold">Edit details</button>
+                  <button
+                    onClick={() => triggerReplace(doc)}
+                    disabled={replacing && replacingDoc?.id === doc.id}
+                    className="text-gray-500 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {replacing && replacingDoc?.id === doc.id ? 'Replacing...' : 'Replace file'}
+                  </button>
+                  <button onClick={() => deleteDocument(doc)} className="text-red-400 text-xs font-semibold ml-auto">Delete</button>
+                </div>
+              )}
             </div>
           )
         })}
