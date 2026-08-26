@@ -7,10 +7,12 @@ import { getCurrentProfile, type Profile } from '@/lib/profile'
 export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [dueCount, setDueCount] = useState(0)
+  const [auditDueCount, setAuditDueCount] = useState(0)
 
   useEffect(() => {
     getCurrentProfile().then(setProfile)
     checkDue()
+    checkAuditsDue()
   }, [])
 
   async function checkDue() {
@@ -20,6 +22,15 @@ export default function Home() {
       .select('id', { count: 'exact', head: true })
       .lte('review_date', in30Days)
     setDueCount(count ?? 0)
+  }
+
+  async function checkAuditsDue() {
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const { count } = await supabase
+      .from('audits')
+      .select('id', { count: 'exact', head: true })
+      .lte('reaudit_date', in30Days)
+    setAuditDueCount(count ?? 0)
   }
 
   return (
@@ -46,6 +57,22 @@ export default function Home() {
             <h2 className="font-semibold text-gray-900">Policies & SOPs</h2>
             <p className="text-sm text-gray-500">
               {dueCount > 0 ? `${dueCount} due for review` : 'Search the document library'}
+            </p>
+          </div>
+          <span className="text-gray-400 text-lg">›</span>
+        </a>
+
+        <a
+          href="/audits"
+          className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 shadow-sm block"
+        >
+          <div className="bg-teal-100 rounded-full w-12 h-12 flex items-center justify-center text-xl shrink-0">
+            🔎
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-semibold text-gray-900">Audits</h2>
+            <p className="text-sm text-gray-500">
+              {auditDueCount > 0 ? `${auditDueCount} re-audit${auditDueCount !== 1 ? 's' : ''} due soon` : 'Search the audit library'}
             </p>
           </div>
           <span className="text-gray-400 text-lg">›</span>

@@ -17,7 +17,8 @@ export default function PolicyHubNav() {
       <a href="/policies/review-schedule" className="text-xs text-teal-600 font-semibold">Review Schedule</a>
       {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold">Gap Analysis</a>}
       <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold">CQC Standards</a>
-      {isManager && <a href="/policies/audit" className="text-xs text-gray-600 font-semibold">Audit Log</a>}
+      <a href="/audits" className="text-xs text-teal-700 font-semibold">Audits</a>
+      {isManager && <a href="/policies/audit" className="text-xs text-gray-600 font-semibold">Activity Log</a>}
     </div>
   )
 }

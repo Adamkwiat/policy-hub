@@ -56,7 +56,7 @@ export default function AuditPage() {
       <div className="bg-white border-b border-gray-200 px-4 py-4 space-y-2">
         <div className="flex items-center gap-3">
           <a href="/policies" className="text-gray-500 text-sm">← Back</a>
-          <h1 className="text-xl font-semibold text-gray-900">Audit Log</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Activity Log</h1>
         </div>
         <PolicyHubNav />
       </div>
@@ -64,13 +64,13 @@ export default function AuditPage() {
       <div className="p-4 space-y-3">
         {!isManager && profile && (
           <div className="bg-gray-100 rounded-xl p-4">
-            <p className="text-sm text-gray-500">Only managers can view the audit log.</p>
+            <p className="text-sm text-gray-500">Only managers can view the activity log.</p>
           </div>
         )}
 
         {isManager && (
           <>
-            <p className="text-xs text-gray-400">Most recent 200 actions across the policy library.</p>
+            <p className="text-xs text-gray-400">Most recent 200 actions across policies and audits.</p>
 
             {loading && <p className="text-sm text-gray-400 text-center py-8">Loading...</p>}
 
