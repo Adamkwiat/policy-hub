@@ -14,6 +14,7 @@ export default function ViewDocument({ params }: { params: Promise<{ id: string 
   const [doc, setDoc] = useState<Document | null>(null)
   const [pdfUrl, setPdfUrl] = useState('')
   const [html, setHtml] = useState('')
+  const [downloadUrl, setDownloadUrl] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -31,6 +32,7 @@ export default function ViewDocument({ params }: { params: Promise<{ id: string 
 
     const { data: signed } = await supabase.storage.from('policies').createSignedUrl(document.storage_path, 60 * 60)
     if (!signed) { setError('Could not access this file.'); setLoading(false); return }
+    setDownloadUrl(signed.signedUrl)
 
     const nameLower = document.name.toLowerCase()
 
@@ -64,8 +66,13 @@ export default function ViewDocument({ params }: { params: Promise<{ id: string 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
       <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3 shrink-0">
-        <a href="/policies" className="text-gray-500 text-sm">← Back</a>
-        <h1 className="text-sm font-semibold text-gray-900 truncate">{doc?.name ?? 'Loading...'}</h1>
+        <a href="/policies" className="text-gray-500 text-sm shrink-0">← Back</a>
+        <h1 className="text-sm font-semibold text-gray-900 truncate flex-1">{doc?.name ?? 'Loading...'}</h1>
+        {downloadUrl && (
+          <a href={downloadUrl} target="_blank" rel="noreferrer" className="text-purple-600 text-xs font-semibold shrink-0">
+            Download original
+          </a>
+        )}
       </div>
 
       {loading && (
@@ -77,8 +84,8 @@ export default function ViewDocument({ params }: { params: Promise<{ id: string 
       {!loading && error && (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4">
           <p className="text-sm text-gray-500">{error}</p>
-          {pdfUrl && (
-            <a href={pdfUrl} target="_blank" rel="noreferrer" className="bg-purple-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
+          {downloadUrl && (
+            <a href={downloadUrl} target="_blank" rel="noreferrer" className="bg-purple-600 text-white rounded-xl px-4 py-2 text-sm font-semibold">
               Download file
             </a>
           )}
