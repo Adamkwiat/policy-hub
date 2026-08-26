@@ -14,6 +14,7 @@ export default function PolicyHubNav() {
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
+      <a href="/ask" className="text-xs text-green-600 font-semibold">Ask AI</a>
       <a href="/policies/review-schedule" className="text-xs text-teal-600 font-semibold">Review Schedule</a>
       {isManager && <a href="/policies/gap-analysis" className="text-xs text-purple-600 font-semibold">Gap Analysis</a>}
       <a href="/cqc-standards" className="text-xs text-blue-600 font-semibold">CQC Standards</a>
