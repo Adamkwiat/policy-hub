@@ -47,12 +47,7 @@ Respond with ONLY valid JSON, no other text, in this exact shape:
     })
   } catch (e) {
     console.error('Gap analysis API error:', e)
-    return Response.json({
-      error: e instanceof Error ? e.message : 'Anthropic API call failed',
-      stack: e instanceof Error ? e.stack : undefined,
-      keyLength: process.env.ANTHROPIC_API_KEY?.length ?? 0,
-      keyStart: process.env.ANTHROPIC_API_KEY?.slice(0, 15) ?? '',
-    }, { status: 502 })
+    return Response.json({ error: e instanceof Error ? e.message : 'Anthropic API call failed' }, { status: 502 })
   }
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
