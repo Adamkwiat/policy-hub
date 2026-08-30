@@ -81,6 +81,14 @@ export default function ProfilePage() {
           </button>
         </div>
 
+        {profile?.role === 'manager' && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+            <a href="/profile/staff" className="block w-full text-center text-purple-600 font-semibold text-sm py-2">
+              Manage Staff
+            </a>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
           <button
             onClick={signOut}
