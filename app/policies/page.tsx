@@ -6,6 +6,7 @@ import { getCurrentProfile, type Profile } from '@/lib/profile'
 import { formatDate, reviewStatus } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import PolicyHubNav from '@/components/PolicyHubNav'
+import CqcChat from '@/components/CqcChat'
 
 const CATEGORIES = ['Clinical', 'HR', 'Health & Safety', 'Information Governance', 'Safeguarding', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
@@ -623,6 +624,7 @@ export default function PoliciesPage() {
                     <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
                   )}
                   <p className="text-[11px] text-blue-400">AI-assisted suggestion — review before relying on it.</p>
+                  {previewingDoc.content && <CqcChat key={previewingDoc.id} documentId={previewingDoc.id} />}
                 </div>
               )}
               <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{previewingDoc.content}</p>
