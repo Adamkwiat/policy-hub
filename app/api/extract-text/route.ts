@@ -1,3 +1,5 @@
+import { extractDocText } from '@/lib/wordDoc'
+
 export const maxDuration = 60
 
 export async function POST(request: Request) {
@@ -20,6 +22,10 @@ export async function POST(request: Request) {
       const mammoth = await import('mammoth')
       const result = await mammoth.extractRawText({ buffer })
       return Response.json({ text: result.value.trim() })
+    }
+
+    if (name.endsWith('.doc')) {
+      return Response.json({ text: await extractDocText(buffer) })
     }
   } catch (e) {
     console.error('Text extraction error:', e)

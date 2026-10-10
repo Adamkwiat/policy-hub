@@ -42,7 +42,7 @@ export default function ViewAudit({ params }: { params: Promise<{ id: string }> 
       return
     }
 
-    if (nameLower.endsWith('.docx')) {
+    if (nameLower.endsWith('.docx') || nameLower.endsWith('.doc')) {
       const res = await fetch('/api/render-docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

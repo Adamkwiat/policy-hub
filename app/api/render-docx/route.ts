@@ -1,3 +1,5 @@
+import { isLegacyDoc, extractDocText, textToHtml } from '@/lib/wordDoc'
+
 export const maxDuration = 60
 
 export async function POST(request: Request) {
@@ -10,6 +12,10 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await fileRes.arrayBuffer())
 
   try {
+    if (isLegacyDoc(buffer)) {
+      return Response.json({ html: textToHtml(await extractDocText(buffer)) })
+    }
+
     const mammoth = await import('mammoth')
     const result = await mammoth.convertToHtml({ buffer })
     return Response.json({ html: result.value })
