@@ -141,7 +141,7 @@ export default function AuditsPage() {
 
     let content = ''
     const nameLower = file.name.toLowerCase()
-    if (nameLower.endsWith('.pdf') || nameLower.endsWith('.docx')) {
+    if (nameLower.endsWith('.pdf') || nameLower.endsWith('.docx') || nameLower.endsWith('.doc')) {
       const extractForm = new FormData()
       extractForm.append('file', file)
       const extractRes = await fetch('/api/extract-text', { method: 'POST', body: extractForm })
@@ -303,7 +303,7 @@ export default function AuditsPage() {
 
     let content = ''
     const nameLower = file.name.toLowerCase()
-    if (nameLower.endsWith('.pdf') || nameLower.endsWith('.docx')) {
+    if (nameLower.endsWith('.pdf') || nameLower.endsWith('.docx') || nameLower.endsWith('.doc')) {
       const extractForm = new FormData()
       extractForm.append('file', file)
       const extractRes = await fetch('/api/extract-text', { method: 'POST', body: extractForm })
