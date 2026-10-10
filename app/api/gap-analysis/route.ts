@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { EXPECTED_POLICY_AREAS } from '@/lib/practiceAreas'
+import { requireUser } from '@/lib/require-user'
 
 export const maxDuration = 60
 
@@ -12,6 +13,9 @@ const MAX_REFERENCE_CHARS_PER_DOC = 8000
 const MAX_REFERENCE_CHARS_TOTAL = 40000
 
 export async function POST(request: Request) {
+  const unauthorised = await requireUser()
+  if (unauthorised) return unauthorised
+
   const { documents, referenceDocuments } = await request.json() as {
     documents: DocSummary[]
     referenceDocuments?: ReferenceDoc[]
