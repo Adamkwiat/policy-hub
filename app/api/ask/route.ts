@@ -1,10 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { requireUser } from '@/lib/require-user'
 
 export const maxDuration = 60
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(request: Request) {
+  const unauthorised = await requireUser()
+  if (unauthorised) return unauthorised
+
   const { question, context } = await request.json()
 
   if (!question?.trim()) return Response.json({ error: 'No question' }, { status: 400 })

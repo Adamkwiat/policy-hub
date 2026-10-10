@@ -1,8 +1,12 @@
 import { extractDocText } from '@/lib/wordDoc'
+import { requireUser } from '@/lib/require-user'
 
 export const maxDuration = 60
 
 export async function POST(request: Request) {
+  const unauthorised = await requireUser()
+  if (unauthorised) return unauthorised
+
   const formData = await request.formData()
   const file = formData.get('file') as File | null
 

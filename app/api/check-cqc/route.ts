@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { cqcStandardGuidanceText, cqcStandardNames } from '@/lib/cqcStandards'
+import { requireUser } from '@/lib/require-user'
 
 export const maxDuration = 60
 
@@ -9,6 +10,9 @@ const STANDARDS = cqcStandardNames()
 const STANDARD_GUIDANCE = cqcStandardGuidanceText()
 
 export async function POST(request: Request) {
+  const unauthorised = await requireUser()
+  if (unauthorised) return unauthorised
+
   const { content, document_name } = await request.json()
 
   if (!content?.trim()) return Response.json({ error: 'No content' }, { status: 400 })
