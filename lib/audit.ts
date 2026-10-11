@@ -7,6 +7,7 @@ export type AuditAction =
   | 'delete_document'
   | 'check_cqc'
   | 'run_gap_analysis'
+  | 'remove_staff'
 
 export async function logAction({
   action,
