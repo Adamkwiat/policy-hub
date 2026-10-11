@@ -23,6 +23,9 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   check_cqc: 'ran a CQC check on',
   run_gap_analysis: 'ran a gap analysis',
   remove_staff: 'removed staff member',
+  create_folder: 'created folder',
+  rename_folder: 'renamed folder',
+  delete_folder: 'removed folder',
 }
 
 function formatDateTime(str: string) {

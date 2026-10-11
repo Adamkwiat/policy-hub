@@ -8,6 +8,9 @@ export type AuditAction =
   | 'check_cqc'
   | 'run_gap_analysis'
   | 'remove_staff'
+  | 'create_folder'
+  | 'rename_folder'
+  | 'delete_folder'
 
 export async function logAction({
   action,
