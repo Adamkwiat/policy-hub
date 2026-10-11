@@ -7,8 +7,8 @@ import { formatDate, reviewStatus } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import PolicyHubNav from '@/components/PolicyHubNav'
 import CqcChat from '@/components/CqcChat'
+import { DEFAULT_FOLDERS, fetchFolders } from '@/lib/folders'
 
-const CATEGORIES = ['Clinical', 'HR', 'Health & Safety', 'Information Governance', 'Safeguarding', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
 
 type AiReview = {
@@ -37,6 +37,9 @@ export default function PoliciesPage() {
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [folderList, setFolderList] = useState<string[]>(DEFAULT_FOLDERS)
+  const [foldersEditable, setFoldersEditable] = useState(false)
+  const [folderBusy, setFolderBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -45,7 +48,7 @@ export default function PoliciesPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingPath, setPendingPath] = useState('')
   const [pendingContent, setPendingContent] = useState('')
-  const [formCategory, setFormCategory] = useState(CATEGORIES[0])
+  const [formCategory, setFormCategory] = useState(DEFAULT_FOLDERS[0])
   const [formOwner, setFormOwner] = useState('')
   const [formReviewDate, setFormReviewDate] = useState('')
   const [formCqcStandard, setFormCqcStandard] = useState('')
@@ -66,7 +69,7 @@ export default function PoliciesPage() {
 
   // Edit form state (existing document)
   const [editingDoc, setEditingDoc] = useState<Document | null>(null)
-  const [editCategory, setEditCategory] = useState(CATEGORIES[0])
+  const [editCategory, setEditCategory] = useState(DEFAULT_FOLDERS[0])
   const [editOwner, setEditOwner] = useState('')
   const [editReviewDate, setEditReviewDate] = useState('')
   const [editCqcStandard, setEditCqcStandard] = useState('')
@@ -82,7 +85,66 @@ export default function PoliciesPage() {
   useEffect(() => {
     getCurrentProfile().then(setProfile)
     fetchDocuments()
+    loadFolders()
   }, [])
+
+  async function loadFolders() {
+    const { folders, editable } = await fetchFolders()
+    setFolderList(folders)
+    setFoldersEditable(editable)
+  }
+
+  // Folders from the list, plus any category a document already uses that isn't in it
+  const folders = useMemo(() => {
+    const extra = documents.map(d => d.category).filter(c => !folderList.includes(c))
+    return [...folderList, ...Array.from(new Set(extra)).sort()]
+  }, [folderList, documents])
+
+  const folderCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const d of documents) counts[d.category] = (counts[d.category] ?? 0) + 1
+    return counts
+  }, [documents])
+
+  async function createFolder() {
+    const name = prompt('Name for the new folder')?.trim()
+    if (!name) return
+    if (folders.some(f => f.toLowerCase() === name.toLowerCase())) { setError(`There's already a folder called "${name}".`); return }
+    setFolderBusy(true)
+    setError('')
+    const { error: insertError } = await supabase.from('policy_folders').insert({ name })
+    if (insertError) { setError(`Could not create folder: ${insertError.message}`); setFolderBusy(false); return }
+    await logAction({ action: 'create_folder', resourceType: 'folder', resourceName: name })
+    await loadFolders()
+    setFolderBusy(false)
+  }
+
+  async function renameFolder(oldName: string) {
+    const newName = prompt(`Rename "${oldName}" to`, oldName)?.trim()
+    if (!newName || newName === oldName) return
+    if (folders.some(f => f !== oldName && f.toLowerCase() === newName.toLowerCase())) { setError(`There's already a folder called "${newName}".`); return }
+    setFolderBusy(true)
+    setError('')
+    const { error: renameError } = await supabase.rpc('rename_policy_folder', { old_name: oldName, new_name: newName })
+    if (renameError) { setError(`Could not rename folder: ${renameError.message}`); setFolderBusy(false); return }
+    await logAction({ action: 'rename_folder', resourceType: 'folder', resourceName: `${oldName} → ${newName}` })
+    setCategoryFilter(newName)
+    await Promise.all([loadFolders(), fetchDocuments()])
+    setFolderBusy(false)
+  }
+
+  async function deleteFolder(name: string) {
+    if ((folderCounts[name] ?? 0) > 0) { setError('Move or delete the policies in this folder before removing it.'); return }
+    if (!confirm(`Remove the empty folder "${name}"?`)) return
+    setFolderBusy(true)
+    setError('')
+    const { error: deleteError } = await supabase.from('policy_folders').delete().eq('name', name)
+    if (deleteError) { setError(`Could not remove folder: ${deleteError.message}`); setFolderBusy(false); return }
+    await logAction({ action: 'delete_folder', resourceType: 'folder', resourceName: name })
+    setCategoryFilter('')
+    await loadFolders()
+    setFolderBusy(false)
+  }
 
   async function fetchDocuments() {
     const { data } = await supabase.from('documents').select('*').order('created_at', { ascending: false })
@@ -109,6 +171,9 @@ export default function PoliciesPage() {
         || (d.content ?? '').toLowerCase().includes(q)
     })
   }, [documents, search, categoryFilter])
+
+  // With no folder open and nothing typed, show the folders; searching covers every folder
+  const showFolders = !categoryFilter && !search.trim()
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -139,7 +204,7 @@ export default function PoliciesPage() {
     setPendingFile(file)
     setPendingPath(storagePath)
     setPendingContent(content)
-    setFormCategory(CATEGORIES[0])
+    setFormCategory(categoryFilter || folders[0])
     setFormOwner('')
     setFormReviewDate('')
     setFormCqcStandard('')
@@ -351,27 +416,24 @@ export default function PoliciesPage() {
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name, category, owner, or content..."
+          placeholder="Search all policies by name, folder, owner, or content..."
           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900"
         />
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setCategoryFilter('')}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${categoryFilter === '' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-          >
-            All
-          </button>
-          {CATEGORIES.map(c => (
-            <button
-              key={c}
-              onClick={() => setCategoryFilter(c)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${categoryFilter === c ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
+        {categoryFilter && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCategoryFilter('')} className="text-gray-500 text-sm shrink-0">← All folders</button>
+            <h2 className="font-semibold text-gray-900 text-sm flex-1 truncate">📁 {categoryFilter}</h2>
+            {isManager && foldersEditable && folderList.includes(categoryFilter) && (
+              <>
+                <button onClick={() => renameFolder(categoryFilter)} disabled={folderBusy} className="text-gray-500 text-xs font-semibold disabled:opacity-50">Rename</button>
+                {(folderCounts[categoryFilter] ?? 0) === 0 && (
+                  <button onClick={() => deleteFolder(categoryFilter)} disabled={folderBusy} className="text-red-400 text-xs font-semibold disabled:opacity-50">Remove</button>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {isManager && (
           <>
@@ -383,13 +445,40 @@ export default function PoliciesPage() {
           </>
         )}
 
-        {filtered.length === 0 && (
+        {showFolders && (
+          <div className="grid grid-cols-2 gap-2">
+            {folders.map(f => (
+              <button
+                key={f}
+                onClick={() => setCategoryFilter(f)}
+                className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm text-left flex items-center gap-2 min-w-0"
+              >
+                <span className="text-xl shrink-0">📁</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900 truncate">{f}</span>
+                  <span className="block text-xs text-gray-400">{folderCounts[f] ?? 0} {(folderCounts[f] ?? 0) === 1 ? 'policy' : 'policies'}</span>
+                </span>
+              </button>
+            ))}
+            {isManager && foldersEditable && (
+              <button
+                onClick={createFolder}
+                disabled={folderBusy}
+                className="rounded-xl border-2 border-dashed border-gray-300 p-3 text-sm font-semibold text-gray-500 disabled:opacity-50"
+              >
+                + New folder
+              </button>
+            )}
+          </div>
+        )}
+
+        {!showFolders && filtered.length === 0 && (
           <p className="text-center text-gray-400 text-sm mt-8">
-            {documents.length === 0 ? 'No policies uploaded yet.' : 'No policies match your search.'}
+            {search.trim() ? 'No policies match your search.' : 'No policies in this folder yet.'}
           </p>
         )}
 
-        {filtered.map(doc => {
+        {!showFolders && filtered.map(doc => {
           const status = reviewStatus(doc.review_date)
           return (
             <div key={doc.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -474,7 +563,7 @@ export default function PoliciesPage() {
               <div>
                 <label className="text-sm font-semibold text-gray-700 block mb-1">Category</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900">
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {folders.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
@@ -557,7 +646,7 @@ export default function PoliciesPage() {
               <div>
                 <label className="text-sm font-semibold text-gray-700 block mb-1">Category</label>
                 <select value={editCategory} onChange={e => setEditCategory(e.target.value)} className="w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900">
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {folders.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
