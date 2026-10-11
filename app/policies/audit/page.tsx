@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   delete_document: 'deleted',
   check_cqc: 'ran a CQC check on',
   run_gap_analysis: 'ran a gap analysis',
+  remove_staff: 'removed staff member',
 }
 
 function formatDateTime(str: string) {

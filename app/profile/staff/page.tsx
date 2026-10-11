@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProfile, type Profile } from '@/lib/profile'
+import { logAction } from '@/lib/audit'
 
 type StaffRow = {
   id: string
@@ -81,6 +82,32 @@ export default function ManageStaffPage() {
     setUpdatingId(null)
   }
 
+  async function removeStaff(row: StaffRow) {
+    if (!confirm(`Remove ${row.display_name}? They will no longer be able to sign in to Policy Hub. Documents they uploaded will stay.`)) return
+    setUpdatingId(row.id)
+    setError('')
+    setMessage('')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setError('Not signed in.'); setUpdatingId(null); return }
+
+    const res = await fetch('/api/remove-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: row.id, accessToken: session.access_token }),
+    })
+    const body = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setError(body?.error ?? 'Could not remove this person.')
+    } else {
+      await logAction({ action: 'remove_staff', resourceType: 'staff', resourceName: row.display_name })
+      setStaff(prev => prev.filter(s => s.id !== row.id))
+      setMessage(`${row.display_name} has been removed.`)
+    }
+    setUpdatingId(null)
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
@@ -144,13 +171,24 @@ export default function ManageStaffPage() {
                     <p className="text-sm font-semibold text-gray-900 truncate">{row.display_name}</p>
                     <p className="text-xs text-gray-400 uppercase">{row.role}</p>
                   </div>
-                  <button
-                    onClick={() => toggleRole(row)}
-                    disabled={updatingId === row.id || row.id === profile?.id}
-                    className="text-xs font-semibold text-purple-600 shrink-0 disabled:opacity-40"
-                  >
-                    {updatingId === row.id ? 'Updating...' : row.role === 'manager' ? 'Make staff' : 'Make manager'}
-                  </button>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      onClick={() => toggleRole(row)}
+                      disabled={updatingId === row.id || row.id === profile?.id}
+                      className="text-xs font-semibold text-purple-600 disabled:opacity-40"
+                    >
+                      {updatingId === row.id ? 'Updating...' : row.role === 'manager' ? 'Make staff' : 'Make manager'}
+                    </button>
+                    {row.id !== profile?.id && (
+                      <button
+                        onClick={() => removeStaff(row)}
+                        disabled={updatingId === row.id}
+                        className="text-xs font-semibold text-red-500 disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
