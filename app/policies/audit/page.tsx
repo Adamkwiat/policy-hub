@@ -26,6 +26,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   create_folder: 'created folder',
   rename_folder: 'renamed folder',
   delete_folder: 'removed folder',
+  add_reference_website: 'added reference website',
+  remove_reference_website: 'removed reference website',
 }
 
 function formatDateTime(str: string) {
