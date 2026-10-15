@@ -11,6 +11,8 @@ export type AuditAction =
   | 'create_folder'
   | 'rename_folder'
   | 'delete_folder'
+  | 'add_reference_website'
+  | 'remove_reference_website'
 
 export async function logAction({
   action,
