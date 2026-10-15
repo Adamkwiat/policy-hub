@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { EmailOtpType } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
 export default function ResetPassword() {
@@ -12,6 +13,8 @@ export default function ResetPassword() {
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
   const [linkExpired, setLinkExpired] = useState(false)
+  const [isInvite, setIsInvite] = useState(false)
+  const [pendingLink, setPendingLink] = useState<{ tokenHash: string; type: EmailOtpType } | null>(null)
   const readyRef = useRef(false)
 
   function markReady() {
@@ -20,26 +23,72 @@ export default function ResetPassword() {
   }
 
   useEffect(() => {
-    // Supabase's recovery link needs a moment to exchange its one-time code
-    // for a session before we can call updateUser(). Listen for that, and
-    // also check in case the session was already established by page load.
+    // Password reset links arrive as a one-time code that the Supabase client exchanges
+    // on its own. Listen for that, and also check in case it already happened.
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) markReady()
-    })
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) markReady()
     })
 
     const timeout = setTimeout(() => {
       if (!readyRef.current) setLinkExpired(true)
     }, 5000)
 
+    async function readLink() {
+      const hash = new URLSearchParams(window.location.hash.slice(1))
+      const query = new URLSearchParams(window.location.search)
+      const type = hash.get('type') ?? query.get('type')
+
+      // Let the client finish handling the URL itself before we look at it.
+      const { data } = await supabase.auth.getSession()
+      if (type === 'invite') setIsInvite(true)
+
+      // Supabase sends people back here with an error when the link was already used.
+      if (hash.get('error_code') || query.get('error_code')) {
+        clearTimeout(timeout)
+        return setLinkExpired(true)
+      }
+
+      // Links carrying a token_hash are only used up when the person presses Continue,
+      // so email link scanners (e.g. Outlook Safe Links) that open the link first can't spend it.
+      const tokenHash = query.get('token_hash')
+      if (tokenHash && type) {
+        clearTimeout(timeout)
+        return setPendingLink({ tokenHash, type: type as EmailOtpType })
+      }
+
+      // Invite links arrive with the session in the URL fragment instead, which our
+      // client (set up for one-time codes) ignores, so pick it up here.
+      const accessToken = hash.get('access_token')
+      const refreshToken = hash.get('refresh_token')
+      if (accessToken && refreshToken) {
+        const { data: set, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        window.history.replaceState(null, '', window.location.pathname)
+        if (set.session && !error) markReady()
+        else setLinkExpired(true)
+        return
+      }
+
+      if (data.session) markReady()
+    }
+    readLink()
+
     return () => {
       listener.subscription.unsubscribe()
       clearTimeout(timeout)
     }
   }, [])
+
+  async function handleContinue() {
+    if (!pendingLink) return
+    setLoading(true)
+    setError('')
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash: pendingLink.tokenHash, type: pendingLink.type })
+    setLoading(false)
+    window.history.replaceState(null, '', window.location.pathname)
+    setPendingLink(null)
+    if (data.session && !error) markReady()
+    else setLinkExpired(true)
+  }
 
   async function handleReset() {
     if (!password.trim()) { setError('Please enter a new password.'); return }
@@ -64,7 +113,7 @@ export default function ResetPassword() {
           <span className="text-3xl">📋</span>
         </div>
         <h1 className="text-2xl font-semibold text-gray-900">Policy Hub</h1>
-        <p className="text-sm text-gray-500 mt-1">Set a new password</p>
+        <p className="text-sm text-gray-500 mt-1">{isInvite ? 'Welcome! Choose a password to finish setting up your account' : 'Set a new password'}</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-sm shadow-sm space-y-4">
@@ -77,8 +126,20 @@ export default function ResetPassword() {
         {linkExpired && !ready ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
             <p className="text-sm font-semibold text-amber-800">This link has expired or was already used</p>
-            <p className="text-xs text-amber-700 mt-1">Recovery links only work once. Go back to the login page and request a fresh one.</p>
+            <p className="text-xs text-amber-700 mt-1">
+              {isInvite
+                ? 'Invite links only work once. Go to the login page, enter your email and press "Forgot password?" to get a new link, or ask your practice manager to invite you again.'
+                : 'Recovery links only work once. Go back to the login page and request a fresh one.'}
+            </p>
           </div>
+        ) : pendingLink ? (
+          <button
+            onClick={handleContinue}
+            disabled={loading}
+            className="w-full bg-purple-600 text-white rounded-xl py-3 font-semibold text-sm disabled:opacity-50"
+          >
+            {loading ? 'Checking your link...' : 'Continue'}
+          </button>
         ) : !ready ? (
           <p className="text-sm text-gray-400 text-center py-2">Verifying your link...</p>
         ) : (
