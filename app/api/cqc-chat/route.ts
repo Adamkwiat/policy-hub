@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { cqcStandardGuidanceText } from '@/lib/cqcStandards'
+import { gapLevel, gapText, type ReviewGap } from '@/lib/cqcReview'
 
 export const maxDuration = 60
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   }
 
   const review = doc.ai_review
-    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nGaps flagged:\n${(doc.ai_review.gaps ?? []).map((g: string) => `- ${g}`).join('\n') || '(none)'}`
+    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nGaps flagged:\n${(doc.ai_review.gaps ?? []).map((g: ReviewGap) => `- ${gapLevel(g) === 'suggestion' ? '[Suggestion] ' : gapLevel(g) === 'missing' ? '[Missing or inadequate] ' : ''}${gapText(g)}`).join('\n') || '(none)'}`
     : '(no CQC check has been run on this document yet)'
 
   const system = `You are helping a GP practice manager in England improve a policy document so it meets the CQC (Care Quality Commission) fundamental standards.

@@ -6,16 +6,13 @@ import { getCurrentProfile, type Profile } from '@/lib/profile'
 import { formatDate, reviewStatus } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import PolicyHubNav from '@/components/PolicyHubNav'
+import CqcGapList from '@/components/CqcGapList'
+import { gapSummary, hasMissing, type AiReview } from '@/lib/cqcReview'
 import CqcChat from '@/components/CqcChat'
 import { DEFAULT_FOLDERS, fetchFolders } from '@/lib/folders'
 
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
 
-type AiReview = {
-  standard: string | null
-  assessment: string
-  gaps: string[]
-}
 
 type Document = {
   id: string
@@ -493,9 +490,9 @@ export default function PoliciesPage() {
                     {doc.ai_review && doc.ai_review.gaps.length > 0 && (
                       <button
                         onClick={() => setPreviewingDoc(doc)}
-                        className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold"
+                        className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasMissing(doc.ai_review.gaps) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}
                       >
-                        {doc.ai_review.gaps.length} gap{doc.ai_review.gaps.length !== 1 ? 's' : ''} flagged — view
+                        {gapSummary(doc.ai_review.gaps)} — view
                       </button>
                     )}
                     {doc.ai_review && doc.ai_review.gaps.length === 0 && doc.ai_review.standard && (
@@ -615,9 +612,7 @@ export default function PoliciesPage() {
                     </p>
                     <p className="text-xs text-blue-900">{aiReview.assessment}</p>
                     {aiReview.gaps.length > 0 && (
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {aiReview.gaps.map((gap, i) => <li key={i} className="text-xs text-blue-900">{gap}</li>)}
-                      </ul>
+                      <CqcGapList gaps={aiReview.gaps} references={aiReview.references} size="xs" />
                     )}
                   </div>
                 )}
@@ -704,11 +699,7 @@ export default function PoliciesPage() {
                   </p>
                   <p className="text-sm text-blue-900">{previewingDoc.ai_review.assessment}</p>
                   {previewingDoc.ai_review.gaps.length > 0 ? (
-                    <ul className="list-disc list-inside space-y-1">
-                      {previewingDoc.ai_review.gaps.map((gap, i) => (
-                        <li key={i} className="text-sm text-blue-900">{gap}</li>
-                      ))}
-                    </ul>
+                    <CqcGapList gaps={previewingDoc.ai_review.gaps} references={previewingDoc.ai_review.references} />
                   ) : (
                     <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
                   )}
