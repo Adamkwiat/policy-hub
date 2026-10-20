@@ -22,6 +22,9 @@ type ReferenceWebsite = {
   fetched_at: string | null
 }
 
+// An index page listing at least this many pages under it has each one read too
+const MIN_LINKED_PAGES = 3
+
 export default function CqcStandardsReference() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [refDocs, setRefDocs] = useState<ReferenceDoc[]>([])
@@ -35,6 +38,8 @@ export default function CqcStandardsReference() {
   const [siteUrl, setSiteUrl] = useState('')
   const [siteBusy, setSiteBusy] = useState<string | null>(null) // 'add' or the id being refreshed
   const [siteError, setSiteError] = useState('')
+  const [siteProgress, setSiteProgress] = useState('')
+  const [pageCounts, setPageCounts] = useState<Record<string, number>>({})
 
   const isManager = profile?.role === 'manager'
 
@@ -52,17 +57,63 @@ export default function CqcStandardsReference() {
     // The table is created by supabase/008_reference_websites.sql
     setWebsitesReady(!error)
     setWebsites(data ?? [])
+
+    // Linked pages (supabase/009_reference_website_pages.sql); none until that's run
+    const { data: pages } = await supabase.from('reference_website_pages').select('website_id')
+    const counts: Record<string, number> = {}
+    for (const p of pages ?? []) counts[p.website_id] = (counts[p.website_id] ?? 0) + 1
+    setPageCounts(counts)
   }
 
-  async function readWebsite(url: string) {
+  async function readWebsite(url: string, findPages = false) {
     const res = await fetch('/api/fetch-website', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, findPages }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? 'Could not read that website')
-    return body.text as string
+    return { text: (body.text ?? '') as string, subpages: (body.subpages ?? []) as { url: string; title: string }[] }
+  }
+
+  // An index page such as GP mythbusters only lists titles, so read each page it
+  // links to and save it, for the CQC check to pick the relevant ones from.
+  async function readLinkedPages(siteId: string, subpages: { url: string; title: string }[]) {
+    if (subpages.length < MIN_LINKED_PAGES) return ''
+    let done = 0
+    let failed = 0
+    let saveError = ''
+    setSiteProgress(`Reading linked pages: 0 of ${subpages.length}`)
+
+    const queue = [...subpages]
+    async function worker() {
+      while (queue.length && !saveError) {
+        const page = queue.shift()!
+        try {
+          const { text } = await readWebsite(page.url)
+          const { error } = await supabase.from('reference_website_pages').upsert(
+            { website_id: siteId, title: page.title || page.url, url: page.url, content: text, fetched_at: new Date().toISOString() },
+            { onConflict: 'website_id,url' },
+          )
+          if (error) saveError = error.message
+        } catch {
+          failed++
+        }
+        done++
+        setSiteProgress(`Reading linked pages: ${done} of ${subpages.length}`)
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker))
+    setSiteProgress('')
+    if (saveError) throw new Error(`Could not save linked pages: ${saveError}`)
+
+    // Drop pages the index no longer lists
+    const { data: saved } = await supabase.from('reference_website_pages').select('id, url').eq('website_id', siteId)
+    const current = new Set(subpages.map(p => p.url))
+    const stale = (saved ?? []).filter(p => !current.has(p.url)).map(p => p.id)
+    if (stale.length) await supabase.from('reference_website_pages').delete().in('id', stale)
+
+    return failed ? `${failed} of ${subpages.length} linked pages couldn't be read; use Refresh to try again.` : ''
   }
 
   async function addWebsite() {
@@ -74,37 +125,42 @@ export default function CqcStandardsReference() {
     setSiteError('')
     setSiteBusy('add')
     try {
-      const content = await readWebsite(url)
+      const { text, subpages } = await readWebsite(url, true)
       const { data: { user } } = await supabase.auth.getUser()
-      const { error: insertError } = await supabase.from('reference_websites').insert({
-        name, url, content, fetched_at: new Date().toISOString(), added_by: user?.id,
-      })
-      if (insertError) throw new Error(`Save failed: ${insertError.message}`)
+      const { data: added, error: insertError } = await supabase.from('reference_websites').insert({
+        name, url, content: text, fetched_at: new Date().toISOString(), added_by: user?.id,
+      }).select('id').single()
+      if (insertError || !added) throw new Error(`Save failed: ${insertError?.message ?? 'unknown error'}`)
       await logAction({ action: 'add_reference_website', resourceType: 'reference_website', resourceName: name })
       setSiteName('')
       setSiteUrl('')
-      await fetchWebsites()
+      setSiteError(await readLinkedPages(added.id, subpages))
     } catch (e) {
       setSiteError(e instanceof Error ? e.message : 'Could not add that website')
     }
+    setSiteProgress('')
     setSiteBusy(null)
+    await fetchWebsites()
   }
 
   async function refreshWebsite(site: ReferenceWebsite) {
     setSiteError('')
     setSiteBusy(site.id)
     try {
-      const content = await readWebsite(site.url)
+      const { text, subpages } = await readWebsite(site.url, true)
       const { error: updateError } = await supabase
         .from('reference_websites')
-        .update({ content, fetched_at: new Date().toISOString() })
+        .update({ content: text, fetched_at: new Date().toISOString() })
         .eq('id', site.id)
       if (updateError) throw new Error(`Save failed: ${updateError.message}`)
-      await fetchWebsites()
+      const warning = await readLinkedPages(site.id, subpages)
+      if (warning) setSiteError(`${site.name}: ${warning}`)
     } catch (e) {
       setSiteError(`${site.name}: ${e instanceof Error ? e.message : 'Could not refresh'}`)
     }
+    setSiteProgress('')
     setSiteBusy(null)
+    await fetchWebsites()
   }
 
   async function removeWebsite(site: ReferenceWebsite) {
@@ -180,7 +236,7 @@ export default function CqcStandardsReference() {
       <div className="p-4 space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
           <p className="text-sm text-blue-900">
-            This is exactly what the AI CQC check reads before assessing your policies — the same summary is sent to Claude for every check, so what you see below is what it's actually looking for, plus any reference websites you add further down.
+            The AI CQC check is based mainly on the reference websites you add further down (such as CQC’s GP mythbusters). The summary of the five standards below is also sent with every check, to pick the standard a policy relates to and as background where the websites don’t cover it.
           </p>
           <p className="text-xs text-blue-700">
             It's Claude's own summary of the five standards, not verbatim CQC regulation text. For the authoritative, up-to-date wording, refer to{' '}
@@ -209,7 +265,7 @@ export default function CqcStandardsReference() {
           <div>
             <h2 className="font-semibold text-gray-900">Reference websites for the CQC check</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Add web pages (e.g. CQC GP mythbusters or NHS England guidance) and every CQC check will read them alongside the summary above. The page is read when you add it; use Refresh if it changes.
+              Add web pages (e.g. CQC GP mythbusters or NHS England guidance) and every CQC check is based mainly on them, with the summary above as background. For an index page like GP mythbusters, each page it lists is read too and the check uses the ones relevant to each policy. Pages are read when you add them; use Refresh to pick up changes.
             </p>
           </div>
 
@@ -218,6 +274,7 @@ export default function CqcStandardsReference() {
           ) : (
             <>
               {siteError && <p className="text-sm text-red-600">{siteError}</p>}
+              {siteProgress && <p className="text-sm text-gray-500">{siteProgress}</p>}
 
               {isManager && (
                 <div className="space-y-2">
@@ -253,7 +310,8 @@ export default function CqcStandardsReference() {
                       <div className="min-w-0">
                         <a href={site.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-blue-600 truncate block">{site.name}</a>
                         <p className="text-xs text-gray-400 truncate">
-                          {site.fetched_at ? `Read ${new Date(site.fetched_at).toLocaleDateString('en-GB')}` : 'Not read yet'} · {site.url}
+                          {site.fetched_at ? `Read ${new Date(site.fetched_at).toLocaleDateString('en-GB')}` : 'Not read yet'}
+                          {pageCounts[site.id] ? ` · ${pageCounts[site.id]} linked pages` : ''} · {site.url}
                         </p>
                       </div>
                       {isManager && (

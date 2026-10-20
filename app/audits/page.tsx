@@ -6,15 +6,12 @@ import { getCurrentProfile, type Profile } from '@/lib/profile'
 import { formatDate } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import AuditsNav from '@/components/AuditsNav'
+import CqcGapList from '@/components/CqcGapList'
+import { gapSummary, hasMissing, type AiReview } from '@/lib/cqcReview'
 
 const AUDIT_TYPES = ['Clinical', 'Prescribing', 'Infection Control', 'Safeguarding', 'Significant Event', 'Health & Safety', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
 
-type AiReview = {
-  standard: string | null
-  assessment: string
-  gaps: string[]
-}
 
 type Audit = {
   id: string
@@ -408,8 +405,8 @@ export default function AuditsPage() {
                     {a.cqc_standard && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{a.cqc_standard}</span>}
                     {status && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status.className}`}>Re-audit {status.label}</span>}
                     {a.ai_review && a.ai_review.gaps.length > 0 && (
-                      <button onClick={() => setPreviewingAudit(a)} className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                        {a.ai_review.gaps.length} gap{a.ai_review.gaps.length !== 1 ? 's' : ''} flagged — view
+                      <button onClick={() => setPreviewingAudit(a)} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasMissing(a.ai_review.gaps) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {gapSummary(a.ai_review.gaps)} — view
                       </button>
                     )}
                     {a.ai_review && a.ai_review.gaps.length === 0 && a.ai_review.standard && (
@@ -534,9 +531,7 @@ export default function AuditsPage() {
                     </p>
                     <p className="text-xs text-blue-900">{aiReview.assessment}</p>
                     {aiReview.gaps.length > 0 && (
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {aiReview.gaps.map((gap, i) => <li key={i} className="text-xs text-blue-900">{gap}</li>)}
-                      </ul>
+                      <CqcGapList gaps={aiReview.gaps} references={aiReview.references} size="xs" />
                     )}
                   </div>
                 )}
@@ -631,11 +626,7 @@ export default function AuditsPage() {
                   </p>
                   <p className="text-sm text-blue-900">{previewingAudit.ai_review.assessment}</p>
                   {previewingAudit.ai_review.gaps.length > 0 ? (
-                    <ul className="list-disc list-inside space-y-1">
-                      {previewingAudit.ai_review.gaps.map((gap, i) => (
-                        <li key={i} className="text-sm text-blue-900">{gap}</li>
-                      ))}
-                    </ul>
+                    <CqcGapList gaps={previewingAudit.ai_review.gaps} references={previewingAudit.ai_review.references} />
                   ) : (
                     <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
                   )}
