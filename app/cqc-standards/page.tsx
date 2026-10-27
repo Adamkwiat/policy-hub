@@ -218,6 +218,7 @@ export default function CqcStandardsReference() {
   }
 
   async function deleteRefDoc(doc: ReferenceDoc) {
+    if (!confirm(`Are you sure you want to delete "${doc.name}"? This cannot be undone.`)) return
     await supabase.storage.from('reference-documents').remove([doc.storage_path])
     await supabase.from('reference_documents').delete().eq('id', doc.id)
     setRefDocs(prev => prev.filter(d => d.id !== doc.id))
