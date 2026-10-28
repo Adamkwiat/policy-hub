@@ -390,6 +390,7 @@ export default function PoliciesPage() {
   }
 
   async function deleteDocument(doc: Document) {
+    if (!confirm(`Are you sure you want to delete "${doc.name}"? This cannot be undone.`)) return
     await supabase.storage.from('policies').remove([doc.storage_path])
     await supabase.from('documents').delete().eq('id', doc.id)
     await logAction({ action: 'delete_document', resourceType: 'document', resourceName: doc.name })

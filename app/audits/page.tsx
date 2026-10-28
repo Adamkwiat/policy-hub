@@ -331,6 +331,7 @@ export default function AuditsPage() {
   }
 
   async function deleteAudit(a: Audit) {
+    if (!confirm(`Are you sure you want to delete "${a.name}"? This cannot be undone.`)) return
     await supabase.storage.from('audits').remove([a.storage_path])
     await supabase.from('audits').delete().eq('id', a.id)
     await logAction({ action: 'delete_document', resourceType: 'audit', resourceName: a.name })
