@@ -21,6 +21,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   replace_document: 'replaced the file for',
   delete_document: 'deleted',
   check_cqc: 'ran a CQC check on',
+  close_cqc_finding: 'closed a CQC finding on',
+  reopen_cqc_finding: 'reopened a CQC finding on',
   run_gap_analysis: 'ran a gap analysis',
   remove_staff: 'removed staff member',
   create_folder: 'created folder',

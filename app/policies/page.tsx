@@ -7,7 +7,7 @@ import { formatDate, reviewStatus } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import PolicyHubNav from '@/components/PolicyHubNav'
 import CqcGapList from '@/components/CqcGapList'
-import { gapSummary, hasMissing, type AiReview } from '@/lib/cqcReview'
+import { decideGap, isOpen, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
 import CqcChat from '@/components/CqcChat'
 import { DEFAULT_FOLDERS, fetchFolders } from '@/lib/folders'
 
@@ -276,7 +276,8 @@ export default function PoliciesPage() {
       const res = await fetch('/api/check-cqc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: doc.content, document_name: doc.name }),
+        // Send the last review so the check follows up on it rather than starting again
+        body: JSON.stringify({ content: doc.content, document_name: doc.name, previous: doc.ai_review }),
       })
       if (!res.ok) { setError('CQC check failed for this document.'); return }
 
@@ -293,6 +294,18 @@ export default function PoliciesPage() {
     } finally {
       setCheckingDocId(null)
     }
+  }
+
+  // A manager closes (or reopens) one finding; saved with the review so re-checks respect it
+  async function decideFinding(doc: Document, index: number, status: GapStatus) {
+    if (!doc.ai_review) return
+    const review = decideGap(doc.ai_review, index, status, profile?.display_name ?? 'Manager')
+    const { data: updated, error: updateError } = await supabase.from('documents').update({ ai_review: review }).eq('id', doc.id).select()
+    if (updateError) { setError(`Could not save: ${updateError.message}`); return }
+    if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); return }
+    await logAction({ action: status === 'open' ? 'reopen_cqc_finding' : 'close_cqc_finding', resourceType: 'document', resourceName: doc.name })
+    setPreviewingDoc({ ...doc, ai_review: review })
+    await fetchDocuments()
   }
 
   function triggerReplace(doc: Document) {
@@ -329,10 +342,11 @@ export default function PoliciesPage() {
       if (extractRes.ok) content = (await extractRes.json()).text ?? ''
     }
 
-    // New file, new content -- the old AI review no longer reflects what's actually in the document.
+    // New file, new content: keep the last review (marked out of date) so the next check
+    // can follow up on it and keep the manager's decisions
     const { data: updated, error: updateError } = await supabase
       .from('documents')
-      .update({ name: file.name, storage_path: newPath, content: content || null, ai_review: null })
+      .update({ name: file.name, storage_path: newPath, content: content || null, ai_review: markOutdated(target.ai_review) })
       .eq('id', target.id)
       .select()
 
@@ -488,30 +502,11 @@ export default function PoliciesPage() {
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{doc.category}</span>
                     {doc.cqc_standard && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{doc.cqc_standard}</span>}
                     {status && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status.className}`}>{status.label}</span>}
-                    {doc.ai_review && doc.ai_review.gaps.length > 0 && (
-                      <button
-                        onClick={() => setPreviewingDoc(doc)}
-                        className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasMissing(doc.ai_review.gaps) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}
-                      >
-                        {gapSummary(doc.ai_review.gaps)} — view
+                    {doc.ai_review && (badge => (
+                      <button onClick={() => setPreviewingDoc(doc)} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
+                        {badge.label}
                       </button>
-                    )}
-                    {doc.ai_review && doc.ai_review.gaps.length === 0 && doc.ai_review.standard && (
-                      <button
-                        onClick={() => setPreviewingDoc(doc)}
-                        className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold"
-                      >
-                        CQC checked — no gaps
-                      </button>
-                    )}
-                    {doc.ai_review && !doc.ai_review.standard && (
-                      <button
-                        onClick={() => setPreviewingDoc(doc)}
-                        className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold"
-                      >
-                        CQC checked — not clearly relevant
-                      </button>
-                    )}
+                    ))(reviewBadge(doc.ai_review))}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">Owner: {doc.owner} · Review: {formatDate(doc.review_date)}</p>
                 </div>
@@ -527,7 +522,7 @@ export default function PoliciesPage() {
                     disabled={checkingDocId === doc.id}
                     className="text-blue-600 text-xs font-semibold disabled:opacity-50"
                   >
-                    {checkingDocId === doc.id ? 'Checking...' : doc.ai_review ? 'Re-check CQC' : 'Check CQC'}
+                    {checkingDocId === doc.id ? 'Checking...' : doc.ai_review?.outdated ? 'Check new version' : doc.ai_review ? 'Re-check CQC' : 'Check CQC'}
                   </button>
                 )}
               </div>
@@ -698,11 +693,25 @@ export default function PoliciesPage() {
                   <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">
                     CQC check {previewingDoc.ai_review.standard ? `— ${previewingDoc.ai_review.standard}` : ''}
                   </p>
+                  {previewingDoc.ai_review.outdated && (
+                    <p className="text-xs font-semibold text-gray-600">A new version has been uploaded since this check. Re-check to update it.</p>
+                  )}
                   <p className="text-sm text-blue-900">{previewingDoc.ai_review.assessment}</p>
-                  {previewingDoc.ai_review.gaps.length > 0 ? (
-                    <CqcGapList gaps={previewingDoc.ai_review.gaps} references={previewingDoc.ai_review.references} />
-                  ) : (
-                    <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
+                  {previewingDoc.ai_review.gaps.length > 0 && (
+                    <CqcGapList
+                      gaps={previewingDoc.ai_review.gaps}
+                      references={previewingDoc.ai_review.references}
+                      onDecide={isManager ? (i, status) => decideFinding(previewingDoc, i, status) : undefined}
+                    />
+                  )}
+                  {!previewingDoc.ai_review.gaps.some(isOpen) && (
+                    <p className="text-xs text-blue-700">No open findings.</p>
+                  )}
+                  {previewingDoc.ai_review.truncated && (
+                    <p className="text-[11px] text-amber-700">This document is very long; only the first part was checked.</p>
+                  )}
+                  {previewingDoc.ai_review.checked_at && (
+                    <p className="text-[11px] text-blue-400">Checked {new Date(previewingDoc.ai_review.checked_at).toLocaleDateString('en-GB')}</p>
                   )}
                   <p className="text-[11px] text-blue-400">AI-assisted suggestion — review before relying on it.</p>
                   {previewingDoc.content && <CqcChat key={previewingDoc.id} documentId={previewingDoc.id} />}

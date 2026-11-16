@@ -6,6 +6,8 @@ export type AuditAction =
   | 'replace_document'
   | 'delete_document'
   | 'check_cqc'
+  | 'close_cqc_finding'
+  | 'reopen_cqc_finding'
   | 'run_gap_analysis'
   | 'remove_staff'
   | 'create_folder'

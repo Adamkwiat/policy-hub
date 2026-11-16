@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import AuditsNav from '@/components/AuditsNav'
 import CqcGapList from '@/components/CqcGapList'
-import { gapSummary, hasMissing, type AiReview } from '@/lib/cqcReview'
+import { decideGap, isOpen, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
 
 const AUDIT_TYPES = ['Clinical', 'Prescribing', 'Infection Control', 'Safeguarding', 'Significant Event', 'Health & Safety', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
@@ -218,7 +218,8 @@ export default function AuditsPage() {
       const res = await fetch('/api/check-cqc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: a.content, document_name: a.name }),
+        // Send the last review so the check follows up on it rather than starting again
+        body: JSON.stringify({ content: a.content, document_name: a.name, previous: a.ai_review }),
       })
       if (!res.ok) { setError('CQC check failed for this audit.'); return }
 
@@ -273,6 +274,18 @@ export default function AuditsPage() {
     await fetchAudits()
   }
 
+  // A manager closes (or reopens) one finding; saved with the review so re-checks respect it
+  async function decideFinding(a: Audit, index: number, status: GapStatus) {
+    if (!a.ai_review) return
+    const review = decideGap(a.ai_review, index, status, profile?.display_name ?? 'Manager')
+    const { data: updated, error: updateError } = await supabase.from('audits').update({ ai_review: review }).eq('id', a.id).select()
+    if (updateError) { setError(`Could not save: ${updateError.message}`); return }
+    if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions."); return }
+    await logAction({ action: status === 'open' ? 'reopen_cqc_finding' : 'close_cqc_finding', resourceType: 'audit', resourceName: a.name })
+    setPreviewingAudit({ ...a, ai_review: review })
+    await fetchAudits()
+  }
+
   function triggerReplace(a: Audit) {
     setReplacingAudit(a)
     setError('')
@@ -309,7 +322,8 @@ export default function AuditsPage() {
 
     const { data: updated, error: updateError } = await supabase
       .from('audits')
-      .update({ name: file.name, storage_path: newPath, content: content || null, ai_review: null })
+      // Keep the last review (marked out of date) so the next check can follow up on it
+      .update({ name: file.name, storage_path: newPath, content: content || null, ai_review: markOutdated(target.ai_review) })
       .eq('id', target.id)
       .select()
 
@@ -405,21 +419,11 @@ export default function AuditsPage() {
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{a.audit_type}</span>
                     {a.cqc_standard && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{a.cqc_standard}</span>}
                     {status && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${status.className}`}>Re-audit {status.label}</span>}
-                    {a.ai_review && a.ai_review.gaps.length > 0 && (
-                      <button onClick={() => setPreviewingAudit(a)} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasMissing(a.ai_review.gaps) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {gapSummary(a.ai_review.gaps)} — view
+                    {a.ai_review && (badge => (
+                      <button onClick={() => setPreviewingAudit(a)} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
+                        {badge.label}
                       </button>
-                    )}
-                    {a.ai_review && a.ai_review.gaps.length === 0 && a.ai_review.standard && (
-                      <button onClick={() => setPreviewingAudit(a)} className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                        CQC checked — no gaps
-                      </button>
-                    )}
-                    {a.ai_review && !a.ai_review.standard && (
-                      <button onClick={() => setPreviewingAudit(a)} className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold">
-                        CQC checked — not clearly relevant
-                      </button>
-                    )}
+                    ))(reviewBadge(a.ai_review))}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">
                     Owner: {a.owner} · Audited: {formatDate(a.audit_date)} · Re-audit due: {formatDate(a.reaudit_date)}
@@ -437,7 +441,7 @@ export default function AuditsPage() {
                     disabled={checkingId === a.id}
                     className="text-blue-600 text-xs font-semibold disabled:opacity-50"
                   >
-                    {checkingId === a.id ? 'Checking...' : a.ai_review ? 'Re-check CQC' : 'Check CQC'}
+                    {checkingId === a.id ? 'Checking...' : a.ai_review?.outdated ? 'Check new version' : a.ai_review ? 'Re-check CQC' : 'Check CQC'}
                   </button>
                 )}
               </div>
@@ -625,11 +629,25 @@ export default function AuditsPage() {
                   <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">
                     CQC check {previewingAudit.ai_review.standard ? `— ${previewingAudit.ai_review.standard}` : ''}
                   </p>
+                  {previewingAudit.ai_review.outdated && (
+                    <p className="text-xs font-semibold text-gray-600">A new version has been uploaded since this check. Re-check to update it.</p>
+                  )}
                   <p className="text-sm text-blue-900">{previewingAudit.ai_review.assessment}</p>
-                  {previewingAudit.ai_review.gaps.length > 0 ? (
-                    <CqcGapList gaps={previewingAudit.ai_review.gaps} references={previewingAudit.ai_review.references} />
-                  ) : (
-                    <p className="text-xs text-blue-700">No obvious gaps flagged.</p>
+                  {previewingAudit.ai_review.gaps.length > 0 && (
+                    <CqcGapList
+                      gaps={previewingAudit.ai_review.gaps}
+                      references={previewingAudit.ai_review.references}
+                      onDecide={isManager ? (i, status) => decideFinding(previewingAudit, i, status) : undefined}
+                    />
+                  )}
+                  {!previewingAudit.ai_review.gaps.some(isOpen) && (
+                    <p className="text-xs text-blue-700">No open findings.</p>
+                  )}
+                  {previewingAudit.ai_review.truncated && (
+                    <p className="text-[11px] text-amber-700">This document is very long; only the first part was checked.</p>
+                  )}
+                  {previewingAudit.ai_review.checked_at && (
+                    <p className="text-[11px] text-blue-400">Checked {new Date(previewingAudit.ai_review.checked_at).toLocaleDateString('en-GB')}</p>
                   )}
                   <p className="text-[11px] text-blue-400">AI-assisted suggestion — review before relying on it.</p>
                 </div>
