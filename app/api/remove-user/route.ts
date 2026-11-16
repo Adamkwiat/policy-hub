@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   // Deleting the auth user removes their profile (cascade) and their sign-in.
   // Documents, audits and audit log entries they created stay, with uploaded_by set to null.
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+  const { error } = await supabaseAdmin().auth.admin.deleteUser(userId)
 
   if (error) return Response.json({ error: error.message }, { status: 400 })
   return Response.json({ ok: true })

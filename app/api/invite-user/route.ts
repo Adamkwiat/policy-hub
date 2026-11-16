@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
   const origin = new URL(request.url).origin
 
-  const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email.trim(), {
+  const { error } = await supabaseAdmin().auth.admin.inviteUserByEmail(email.trim(), {
     redirectTo: `${origin}/reset-password`,
     data: displayName?.trim() ? { display_name: displayName.trim() } : undefined,
   })
