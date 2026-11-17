@@ -7,6 +7,7 @@ import { formatDate } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import AuditsNav from '@/components/AuditsNav'
 import CqcGapList from '@/components/CqcGapList'
+import CqcGuidance from '@/components/CqcGuidance'
 import { decideGap, isOpen, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
 
 const AUDIT_TYPES = ['Clinical', 'Prescribing', 'Infection Control', 'Safeguarding', 'Significant Event', 'Health & Safety', 'Complaints', 'Other']
@@ -231,6 +232,7 @@ export default function AuditsPage() {
       if (updateError) { setError(`Could not save CQC check: ${updateError.message}`); return }
       if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions."); return }
 
+      setPreviewingAudit(prev => prev && prev.id === a.id ? { ...prev, ...updates } : prev)
       await logAction({ action: 'check_cqc', resourceType: 'audit', resourceName: a.name })
       await fetchAudits()
     } finally {
@@ -272,6 +274,13 @@ export default function AuditsPage() {
     setEditingAudit(null)
     setEditSaving(false)
     await fetchAudits()
+  }
+
+  // A manager changes the guidance this audit is checked against, then it is re-checked with it
+  async function changeGuidance(a: Audit, ids: string[], references: { title: string; url: string }[]) {
+    if (!a.ai_review) return
+    const review: AiReview = { ...a.ai_review, reference_ids: ids, references }
+    await checkExistingAudit({ ...a, ai_review: review })
   }
 
   // A manager closes (or reopens) one finding; saved with the review so re-checks respect it
@@ -633,10 +642,15 @@ export default function AuditsPage() {
                     <p className="text-xs font-semibold text-gray-600">A new version has been uploaded since this check. Re-check to update it.</p>
                   )}
                   <p className="text-sm text-blue-900">{previewingAudit.ai_review.assessment}</p>
+                  <CqcGuidance
+                    review={previewingAudit.ai_review}
+                    canEdit={isManager && !!previewingAudit.content}
+                    busy={checkingId === previewingAudit.id}
+                    onApply={(ids, references) => changeGuidance(previewingAudit, ids, references)}
+                  />
                   {previewingAudit.ai_review.gaps.length > 0 && (
                     <CqcGapList
                       gaps={previewingAudit.ai_review.gaps}
-                      references={previewingAudit.ai_review.references}
                       onDecide={isManager ? (i, status) => decideFinding(previewingAudit, i, status) : undefined}
                     />
                   )}

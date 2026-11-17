@@ -7,6 +7,7 @@ import { formatDate, reviewStatus } from '@/lib/documents'
 import { logAction } from '@/lib/audit'
 import PolicyHubNav from '@/components/PolicyHubNav'
 import CqcGapList from '@/components/CqcGapList'
+import CqcGuidance from '@/components/CqcGuidance'
 import { decideGap, isOpen, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
 import CqcChat from '@/components/CqcChat'
 import { DEFAULT_FOLDERS, fetchFolders } from '@/lib/folders'
@@ -289,11 +290,19 @@ export default function PoliciesPage() {
       if (updateError) { setError(`Could not save CQC check: ${updateError.message}`); return }
       if (!updated || updated.length === 0) { setError("Update didn't apply — you may not have manager permissions on this document."); return }
 
+      setPreviewingDoc(prev => prev && prev.id === doc.id ? { ...prev, ...updates } : prev)
       await logAction({ action: 'check_cqc', resourceType: 'document', resourceName: doc.name })
       await fetchDocuments()
     } finally {
       setCheckingDocId(null)
     }
+  }
+
+  // A manager changes the guidance this document is checked against, then it is re-checked with it
+  async function changeGuidance(doc: Document, ids: string[], references: { title: string; url: string }[]) {
+    if (!doc.ai_review) return
+    const review: AiReview = { ...doc.ai_review, reference_ids: ids, references }
+    await checkExistingDocument({ ...doc, ai_review: review })
   }
 
   // A manager closes (or reopens) one finding; saved with the review so re-checks respect it
@@ -697,10 +706,15 @@ export default function PoliciesPage() {
                     <p className="text-xs font-semibold text-gray-600">A new version has been uploaded since this check. Re-check to update it.</p>
                   )}
                   <p className="text-sm text-blue-900">{previewingDoc.ai_review.assessment}</p>
+                  <CqcGuidance
+                    review={previewingDoc.ai_review}
+                    canEdit={isManager && !!previewingDoc.content}
+                    busy={checkingDocId === previewingDoc.id}
+                    onApply={(ids, references) => changeGuidance(previewingDoc, ids, references)}
+                  />
                   {previewingDoc.ai_review.gaps.length > 0 && (
                     <CqcGapList
                       gaps={previewingDoc.ai_review.gaps}
-                      references={previewingDoc.ai_review.references}
                       onDecide={isManager ? (i, status) => decideFinding(previewingDoc, i, status) : undefined}
                     />
                   )}

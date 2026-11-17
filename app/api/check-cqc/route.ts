@@ -32,8 +32,9 @@ function findingLine(g: ReviewGapObject) {
 }
 
 const MAX_CHARS_PER_SOURCE = 10000
-const MAX_REFERENCE_CHARS = 40000
-const MAX_CHOSEN_PAGES = 4
+const MAX_REFERENCE_CHARS = 80000
+const MAX_CHOSEN_PAGES = 6 // picked automatically
+const MAX_PICKED_PAGES = 8 // chosen by a manager (components/CqcGuidance.tsx)
 const MAX_DOCUMENT_CHARS = 60000 // whole policy for all but very long documents
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -94,10 +95,12 @@ async function referenceSources(documentName: string, content: string, previousI
   const indexSites = new Set(pages.map(p => p.website_id))
 
   const sources: Source[] = []
-  const reused = previousIds.length && previousIds.every(id => pages.some(p => p.id === id))
-    ? previousIds.map(id => pages.find(p => p.id === id)!)
-    : null
-  const chosen = reused ?? await choosePages(pages, documentName, content)
+  // Reuse the last set (possibly chosen by a manager), minus any pages since removed
+  const reused = previousIds
+    .map(id => pages.find(p => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .slice(0, MAX_PICKED_PAGES)
+  const chosen = reused.length ? reused : await choosePages(pages, documentName, content)
   if (chosen.length) {
     const { data: chosenRows } = await supabase
       .from('reference_website_pages')
