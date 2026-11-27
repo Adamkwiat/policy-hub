@@ -8,7 +8,7 @@ import { logAction } from '@/lib/audit'
 import AuditsNav from '@/components/AuditsNav'
 import CqcGapList from '@/components/CqcGapList'
 import CqcGuidance from '@/components/CqcGuidance'
-import { decideGap, isOpen, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
+import { decideGap, markOutdated, reviewBadge, type AiReview, type GapStatus } from '@/lib/cqcReview'
 
 const AUDIT_TYPES = ['Clinical', 'Prescribing', 'Infection Control', 'Safeguarding', 'Significant Event', 'Health & Safety', 'Complaints', 'Other']
 const CQC_STANDARDS = ['Safe', 'Effective', 'Caring', 'Responsive', 'Well-led']
@@ -544,9 +544,7 @@ export default function AuditsPage() {
                       {aiReview.standard ? `AI suggests: ${aiReview.standard}` : "AI didn't find a clear match to any standard"}
                     </p>
                     <p className="text-xs text-blue-900">{aiReview.assessment}</p>
-                    {aiReview.gaps.length > 0 && (
-                      <CqcGapList gaps={aiReview.gaps} references={aiReview.references} size="xs" />
-                    )}
+                    <CqcGapList gaps={aiReview.gaps} references={aiReview.references} size="xs" />
                   </div>
                 )}
               </div>
@@ -648,15 +646,10 @@ export default function AuditsPage() {
                     busy={checkingId === previewingAudit.id}
                     onApply={(ids, references) => changeGuidance(previewingAudit, ids, references)}
                   />
-                  {previewingAudit.ai_review.gaps.length > 0 && (
-                    <CqcGapList
-                      gaps={previewingAudit.ai_review.gaps}
-                      onDecide={isManager ? (i, status) => decideFinding(previewingAudit, i, status) : undefined}
-                    />
-                  )}
-                  {!previewingAudit.ai_review.gaps.some(isOpen) && (
-                    <p className="text-xs text-blue-700">No open findings.</p>
-                  )}
+                  <CqcGapList
+                    gaps={previewingAudit.ai_review.gaps}
+                    onDecide={isManager ? (i, status) => decideFinding(previewingAudit, i, status) : undefined}
+                  />
                   {previewingAudit.ai_review.truncated && (
                     <p className="text-[11px] text-amber-700">This document is very long; only the first part was checked.</p>
                   )}
