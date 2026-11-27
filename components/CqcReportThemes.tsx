@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit'
-import { SHOULD_THRESHOLD, THEME_AREAS, type ThemeRow } from '@/lib/cqcThemes'
+import { THEME_AREAS, type ThemeRow } from '@/lib/cqcThemes'
 
 const YEARS_BACK = 2
 const LOCATIONS_PER_STEP = 60
@@ -114,7 +114,7 @@ export default function CqcReportThemes({ isManager }: { isManager: boolean }) {
       <div>
         <h2 className="font-semibold text-gray-900">What CQC inspectors pick up on</h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Findings from CQC’s published inspection reports of other GP practices over the last {YEARS_BACK} years, grouped by policy area. The CQC check uses them as evidence of what inspectors look for: it raises one only if your policy lacks it and it was a breach of regulations (“must”), or a “should” CQC raised at {SHOULD_THRESHOLD} or more practices. The policy chat can mention the rest as good practice.
+          Findings from CQC’s published inspection reports of other GP practices over the last {YEARS_BACK} years, grouped by policy area. The CQC check stays strict on what’s missing or inadequate, and separately lists anything here that a policy lacks under “Picked up at other practices”. The policy chat uses them too.
         </p>
       </div>
 

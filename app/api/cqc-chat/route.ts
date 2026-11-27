@@ -55,14 +55,14 @@ export async function POST(request: Request) {
   // Optional suggestions saved by older checks are left out: they're no longer shown to staff
   const findings = ((doc.ai_review?.gaps ?? []) as ReviewGap[]).filter(g => gapLevel(g) !== 'suggestion')
   const review = doc.ai_review
-    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nFindings (missing or inadequate content):\n${findings.map(g => `- ${gapStatus(g) !== 'open' ? `[${STATUS_LABELS[gapStatus(g)]}] ` : ''}${gapText(g)}`).join('\n') || '(none: nothing to raise)'}`
+    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nFindings:\n${findings.map(g => `- ${gapLevel(g) === 'inspection' ? '[Picked up at other practices] ' : '[Missing or inadequate] '}${gapStatus(g) !== 'open' ? `[${STATUS_LABELS[gapStatus(g)]}] ` : ''}${gapText(g)}`).join('\n') || '(none: nothing to raise)'}`
     : '(no CQC check has been run on this document yet)'
 
   // What inspectors have picked up on at other practices for this policy's area(s); none
   // until CQC reports have been read on the CQC Standards page (or supabase/010 is run)
   const { data: themeRows } = await callerClient.from('cqc_report_themes').select('area, themes, report_count, updated_at')
   const inspectionText = themeRows?.length
-    ? themesText(await chooseThemeAreas(anthropic, themeRows as ThemeRow[], doc.name, doc.content), false)
+    ? themesText(await chooseThemeAreas(anthropic, themeRows as ThemeRow[], doc.name, doc.content))
     : ''
 
   const system = `You are helping a GP practice manager in England with questions about a policy document and whether it meets the CQC (Care Quality Commission) fundamental standards.

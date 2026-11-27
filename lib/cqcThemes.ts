@@ -13,8 +13,6 @@ export type ThemeRow = { area: string; themes: Theme[]; report_count: number; up
 export const OTHER_AREA = 'Other'
 export const THEME_AREAS = [...EXPECTED_POLICY_AREAS.map(a => a.name), OTHER_AREA]
 
-// A "should" theme only counts in the CQC check when inspectors raised it at this many practices
-export const SHOULD_THRESHOLD = 5
 const MAX_AREAS_PER_POLICY = 2
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -54,13 +52,11 @@ export async function chooseThemeAreas(anthropic: Anthropic, rows: ThemeRow[], d
     .map(x => x.r)
 }
 
-// The themes as text for a prompt. With forCheck, "should" themes raised at only a few
-// practices are left out, so the strict check only sees ones CQC raises widely.
-export function themesText(rows: ThemeRow[], forCheck: boolean) {
+// The themes as text for a prompt
+export function themesText(rows: ThemeRow[]) {
   return rows.map(r => {
-    const themes = r.themes.filter(t => !forCheck || t.type === 'must' || t.reports >= SHOULD_THRESHOLD)
-    if (!themes.length) return ''
-    const lines = themes.map(t => `- [${t.type === 'must' ? 'MUST (breach of regulations)' : 'SHOULD'}, ${t.reports} practice${t.reports === 1 ? '' : 's'}] ${t.text}`)
+    if (!r.themes.length) return ''
+    const lines = r.themes.map(t => `- [${t.type === 'must' ? 'MUST (breach of regulations)' : 'SHOULD'}, ${t.reports} practice${t.reports === 1 ? '' : 's'}] ${t.text}`)
     return `${r.area} (from ${r.report_count} inspection reports):\n${lines.join('\n')}`
   }).filter(Boolean).join('\n\n')
 }
