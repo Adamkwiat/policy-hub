@@ -51,11 +51,13 @@ export async function POST(request: Request) {
     return Response.json({ error: 'No question' }, { status: 400 })
   }
 
+  // Optional suggestions saved by older checks are left out: they're no longer shown to staff
+  const findings = ((doc.ai_review?.gaps ?? []) as ReviewGap[]).filter(g => gapLevel(g) !== 'suggestion')
   const review = doc.ai_review
-    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nGaps flagged:\n${(doc.ai_review.gaps ?? []).map((g: ReviewGap) => `- ${gapLevel(g) === 'suggestion' ? '[Suggestion] ' : gapLevel(g) === 'missing' ? '[Missing or inadequate] ' : ''}${gapStatus(g) !== 'open' ? `[${STATUS_LABELS[gapStatus(g)]}] ` : ''}${gapText(g)}`).join('\n') || '(none)'}`
+    ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nFindings (missing or inadequate content):\n${findings.map(g => `- ${gapStatus(g) !== 'open' ? `[${STATUS_LABELS[gapStatus(g)]}] ` : ''}${gapText(g)}`).join('\n') || '(none: nothing to raise)'}`
     : '(no CQC check has been run on this document yet)'
 
-  const system = `You are helping a GP practice manager in England improve a policy document so it meets the CQC (Care Quality Commission) fundamental standards.
+  const system = `You are helping a GP practice manager in England with questions about a policy document and whether it meets the CQC (Care Quality Commission) fundamental standards.
 
 The five standards are:
 ${STANDARD_GUIDANCE}
@@ -63,7 +65,11 @@ ${STANDARD_GUIDANCE}
 The policy is called "${doc.name}". An earlier automated CQC check gave this result:
 ${review}
 
-Answer the manager's follow-up questions about this policy and that check: explain what a gap means, why CQC inspectors would look for it, and what the policy could say to address it. When suggesting wording, keep it practical and specific to a GP surgery. Base your answers on the policy text below; if the policy doesn't say something, say so rather than assuming. Be concise. This is assistive guidance for a human to review, not a formal compliance determination.
+Answer the manager's questions about this policy and that check: explain what a finding means, why CQC inspectors would look for it, and what the policy could say to address it. When suggesting wording, keep it practical and specific to a GP surgery. Base your answers on the policy text below; if the policy doesn't say something, say so rather than assuming.
+
+If the policy is fine as it is for what the manager asked, say so plainly (e.g. "This section is fine as it is."). You do not have to suggest anything, and "nothing needs changing" is a good answer. Only offer good-practice suggestions when they are obvious and would genuinely help, not for wording, style or minor points. Keep them to one or two, and label them clearly as optional good practice, not CQC requirements.
+
+Be concise. This is assistive guidance for a human to review, not a formal compliance determination.
 
 Policy text:
 ${doc.content.slice(0, 15000)}`
