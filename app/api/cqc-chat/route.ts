@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { cqcStandardGuidanceText } from '@/lib/cqcStandards'
+import { chooseThemeAreas, themesText, type ThemeRow } from '@/lib/cqcThemes'
 import { gapLevel, gapStatus, gapText, STATUS_LABELS, type ReviewGap } from '@/lib/cqcReview'
 
 export const maxDuration = 60
@@ -57,6 +58,13 @@ export async function POST(request: Request) {
     ? `Standard: ${doc.ai_review.standard ?? 'None'}\nAssessment: ${doc.ai_review.assessment}\nFindings (missing or inadequate content):\n${findings.map(g => `- ${gapStatus(g) !== 'open' ? `[${STATUS_LABELS[gapStatus(g)]}] ` : ''}${gapText(g)}`).join('\n') || '(none: nothing to raise)'}`
     : '(no CQC check has been run on this document yet)'
 
+  // What inspectors have picked up on at other practices for this policy's area(s); none
+  // until CQC reports have been read on the CQC Standards page (or supabase/010 is run)
+  const { data: themeRows } = await callerClient.from('cqc_report_themes').select('area, themes, report_count, updated_at')
+  const inspectionText = themeRows?.length
+    ? themesText(await chooseThemeAreas(anthropic, themeRows as ThemeRow[], doc.name, doc.content), false)
+    : ''
+
   const system = `You are helping a GP practice manager in England with questions about a policy document and whether it meets the CQC (Care Quality Commission) fundamental standards.
 
 The five standards are:
@@ -65,7 +73,10 @@ ${STANDARD_GUIDANCE}
 The policy is called "${doc.name}". An earlier automated CQC check gave this result:
 ${review}
 
-Answer the manager's questions about this policy and that check: explain what a finding means, why CQC inspectors would look for it, and what the policy could say to address it. When suggesting wording, keep it practical and specific to a GP surgery. Base your answers on the policy text below; if the policy doesn't say something, say so rather than assuming.
+${inspectionText ? `What CQC inspectors have picked up on at other GP practices in this area, from their published inspection reports over the last two years ("MUST" items were breaches of regulations, "SHOULD" items were improvements CQC asked for). Use it to explain what inspectors look for. A "SHOULD" item this policy doesn't cover can be an optional good-practice suggestion; a "MUST" item it doesn't cover is worth pointing out. Only mention ones that are relevant to the question.
+${inspectionText}
+
+` : ''}Answer the manager's questions about this policy and that check: explain what a finding means, why CQC inspectors would look for it, and what the policy could say to address it. When suggesting wording, keep it practical and specific to a GP surgery. Base your answers on the policy text below; if the policy doesn't say something, say so rather than assuming.
 
 If the policy is fine as it is for what the manager asked, say so plainly (e.g. "This section is fine as it is."). You do not have to suggest anything, and "nothing needs changing" is a good answer. Only offer good-practice suggestions when they are obvious and would genuinely help, not for wording, style or minor points. Keep them to one or two, and label them clearly as optional good practice, not CQC requirements.
 
