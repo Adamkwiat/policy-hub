@@ -56,22 +56,26 @@ export const STATUS_LABELS: Record<GapStatus, string> = {
   already_covered: 'Already covered',
 }
 
-// e.g. "2 missing · 1 suggestion", or "3 gaps flagged" for older checks. Open findings only.
+// True when a finding is open and is something to act on. Optional suggestions saved by
+// older checks are no longer shown: the check only raises missing or inadequate content.
+export function isRaised(gap: ReviewGap) {
+  return isOpen(gap) && gapLevel(gap) !== 'suggestion'
+}
+
+// e.g. "2 missing", or "3 gaps flagged" for older checks. Open findings only.
 export function gapSummary(gaps: ReviewGap[]) {
-  const open = gaps.filter(isOpen)
+  const open = gaps.filter(isRaised)
   const missing = open.filter(g => gapLevel(g) === 'missing').length
-  const suggestions = open.filter(g => gapLevel(g) === 'suggestion').length
-  const unlabelled = open.length - missing - suggestions
+  const unlabelled = open.length - missing
   const parts = []
   if (missing) parts.push(`${missing} missing`)
-  if (suggestions) parts.push(`${suggestions} suggestion${suggestions !== 1 ? 's' : ''}`)
   if (unlabelled) parts.push(`${unlabelled} gap${unlabelled !== 1 ? 's' : ''} flagged`)
   return parts.join(' · ')
 }
 
 // True when an open finding is (or may be) a definite gap
 export function hasMissing(gaps: ReviewGap[]) {
-  return gaps.some(g => isOpen(g) && gapLevel(g) !== 'suggestion')
+  return gaps.some(isRaised)
 }
 
 // The badge shown on a policy or audit card
@@ -85,11 +89,7 @@ export function reviewBadge(review: AiReview): { label: string; className: strin
   if (hasMissing(review.gaps)) {
     return { label: `${gapSummary(review.gaps)} — view`, className: 'bg-red-100 text-red-700' }
   }
-  const optional = review.gaps.filter(g => isOpen(g) && gapLevel(g) === 'suggestion').length
-  return {
-    label: optional ? `Meets guidance · ${optional} optional suggestion${optional !== 1 ? 's' : ''}` : 'Meets guidance',
-    className: 'bg-green-100 text-green-700',
-  }
+  return { label: 'Meets guidance · nothing to raise', className: 'bg-green-100 text-green-700' }
 }
 
 // Keeps the last review (and the manager's decisions) when a new version of the file is uploaded,

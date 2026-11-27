@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { gapLevel, gapStatus, gapText, STATUS_LABELS, type GapStatus, type ReviewGap } from '@/lib/cqcReview'
+import { gapLevel, gapStatus, gapText, isRaised, STATUS_LABELS, type GapStatus, type ReviewGap } from '@/lib/cqcReview'
 
-// Lists CQC check findings: open gaps first, then optional suggestions, then what's been
-// fixed or closed by a manager. With onDecide, managers can close or reopen a finding.
+// Lists CQC check findings: open gaps first, then what's been fixed or closed by a manager.
+// Says so plainly when there is nothing to raise. Optional suggestions saved by older checks
+// aren't shown: the check only raises missing or inadequate content. With onDecide, managers can close or reopen a finding.
 export default function CqcGapList({ gaps, references = [], size = 'sm', onDecide }: {
   gaps: ReviewGap[]
   references?: { title: string; url: string }[]
@@ -17,7 +18,6 @@ export default function CqcGapList({ gaps, references = [], size = 'sm', onDecid
 
   const groups = [
     { title: 'Missing or inadequate', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === 'missing'), heading: 'text-red-700', item: 'text-red-900' },
-    { title: 'Optional suggestions', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === 'suggestion'), heading: 'text-amber-700', item: 'text-gray-800' },
     { title: 'Gaps flagged', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === null), heading: 'text-blue-800', item: 'text-blue-900' },
     { title: 'Fixed since the last check', items: indexed.filter(g => g.status === 'resolved'), heading: 'text-green-700', item: 'text-gray-500' },
     { title: 'Closed by a manager', items: indexed.filter(g => g.status === 'not_adopted' || g.status === 'already_covered'), heading: 'text-gray-500', item: 'text-gray-500' },
@@ -31,8 +31,13 @@ export default function CqcGapList({ gaps, references = [], size = 'sm', onDecid
 
   const buttonClass = 'text-[11px] font-semibold px-2 py-0.5 rounded-full border disabled:opacity-50'
 
+  const nothingToRaise = !gaps.some(isRaised)
+
   return (
     <div className="space-y-2">
+      {nothingToRaise && (
+        <p className={`${text} font-semibold text-green-700`}>✓ Nothing to raise: no missing or inadequate content found.</p>
+      )}
       {groups.map(group => (
         <div key={group.title}>
           <p className={`text-xs font-semibold ${group.heading}`}>{group.title}</p>

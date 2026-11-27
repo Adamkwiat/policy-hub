@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { cqcStandardGuidanceText, cqcStandardNames } from '@/lib/cqcStandards'
 import { requireUser, serverSupabase } from '@/lib/require-user'
-import { gapLevel, gapStatus, isClosedByManager, type AiReview, type ReviewGap, type ReviewGapObject } from '@/lib/cqcReview'
+import { gapStatus, isClosedByManager, type AiReview, type ReviewGap, type ReviewGapObject } from '@/lib/cqcReview'
 
 export const maxDuration = 60
 
@@ -10,15 +10,14 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const STANDARDS = cqcStandardNames()
 const STANDARD_GUIDANCE = cqcStandardGuidanceText()
 
-// New findings from the model, all open
+// New findings from the model, all open. The check only raises missing or inadequate
+// content, so anything the model labels otherwise (e.g. a suggestion) is dropped.
 function normaliseGaps(gaps: unknown): ReviewGapObject[] {
   if (!Array.isArray(gaps)) return []
   return gaps.flatMap((g): ReviewGapObject[] => {
-    if (typeof g === 'string') return [{ level: 'suggestion', text: g, status: 'open' }]
-    if (!g || typeof g !== 'object' || typeof g.text !== 'string' || !g.text.trim()) return []
-    const level = g.level === 'missing' ? 'missing' : 'suggestion'
+    if (!g || typeof g !== 'object' || g.level !== 'missing' || typeof g.text !== 'string' || !g.text.trim()) return []
     const source = typeof g.source === 'string' && g.source.trim() ? g.source.trim() : undefined
-    return [{ level, text: g.text.trim(), ...(source ? { source } : {}), status: 'open' }]
+    return [{ level: 'missing', text: g.text.trim(), ...(source ? { source } : {}), status: 'open' }]
   })
 }
 
@@ -143,9 +142,10 @@ export async function POST(request: Request) {
   if (!content?.trim()) return Response.json({ error: 'No content' }, { status: 400 })
 
   // Re-check: follow up the last review's open findings, keep the manager's decisions,
-  // and drop findings already marked fixed last time
+  // and drop findings already marked fixed last time. Optional suggestions from older
+  // checks are dropped too: the check now only raises missing or inadequate content.
   const previousGaps = (previous?.gaps ?? []).map(asObject)
-  const followUp = previousGaps.filter(g => g.status === 'open')
+  const followUp = previousGaps.filter(g => g.status === 'open' && g.level !== 'suggestion')
   const closed = previousGaps.filter(g => isClosedByManager(g))
   const isRecheck = !!previous
 
@@ -167,19 +167,20 @@ ${closed.length ? `
 The manager has already considered these and decided not to act on them. Do NOT raise them again, or anything substantially the same:
 ${closed.map(g => `- ${findingLine(g)}`).join('\n')}` : ''}
 
-New findings on a re-check: only add a new finding if it is "missing" — something genuinely required by ${guidance} or the law that is absent or inadequate, and that was not raised before. Do not add new suggestions on a re-check.
+New findings on a re-check: only add a finding that meets the strict test below and was not raised before.
 ` : ''
 
-  const findingsInstruction = isRecheck
-    ? `3. ${followUp.length ? 'Give the status of each numbered finding above, then list' : 'List'} any NEW findings, following the re-check rules above. Give an empty list if there are none.`
-    : `3. List your findings, labelling each one clearly:
-   - "missing": something the policy definitely lacks, gets wrong, or covers inadequately, where ${guidance} or a legal requirement says it must be in place (e.g. "No named safeguarding lead"). Only use this when you are confident it is genuinely required and genuinely absent or inadequate in the document.
-   - "suggestion": good practice that would make a real difference but isn't clearly required. Give at most 5 suggestions, the most useful first; leave out minor wording or style points.
-   For each finding give "source": the guidance it comes from (e.g. "GP mythbuster 99"), or "" if it's general good practice. Give an empty list if there is nothing worth raising.`
+  const findingsInstruction = `3. ${isRecheck && followUp.length ? 'Give the status of each numbered finding above, then list' : 'List'} ${isRecheck ? 'any NEW ' : 'any '}findings, applying this STRICT test. Only raise something if ALL of these are true:
+   - ${referenceText ? 'The guidance' : 'The CQC standards'} or the law clearly REQUIRES it to be in a policy like this one (not just good practice or "nice to have").
+   - It is genuinely ABSENT from the document, or what the document says is WRONG or so thin that it would not meet that requirement.
+   - You are confident about both of the above after reading the whole document.
+   Do NOT raise: good-practice ideas, optional improvements, extra detail that isn't required, wording, style, formatting, layout, or anything you are unsure is required. If in doubt, leave it out.
+   Label every finding "level": "missing". For each give "source": the guidance or law it comes from (e.g. "GP mythbuster 99"), or "" if none.
+   If nothing meets the test, give an EMPTY list. An empty list is a perfectly good and expected result.`
 
   const jsonShape = isRecheck && followUp.length
     ? `{"standard": "Safe" | "Effective" | "Caring" | "Responsive" | "Well-led" | "None", "assessment": "string", "previous": [{"n": 1, "status": "resolved" | "open"}], "gaps": [{"level": "missing", "text": "string", "source": "string"}]}`
-    : `{"standard": "Safe" | "Effective" | "Caring" | "Responsive" | "Well-led" | "None", "assessment": "string", "gaps": [{"level": "missing" | "suggestion", "text": "string", "source": "string"}]}`
+    : `{"standard": "Safe" | "Effective" | "Caring" | "Responsive" | "Well-led" | "None", "assessment": "string", "gaps": [{"level": "missing", "text": "string", "source": "string"}]}`
 
   let message
   try {
@@ -200,7 +201,7 @@ The practice has chosen the reference guidance below (such as CQC's GP mythbuste
 ${recheckText}
 Read the policy document below, called "${document_name}", and:
 1. Decide which ONE of the five standards it most relates to (or "None" if it doesn't clearly relate to any, e.g. a purely administrative document).
-2. Give a short assessment (2-3 sentences) of how well it meets what ${referenceText ? 'the guidance' : 'that standard'} expects.
+2. Give a short assessment (1-2 sentences) of whether it meets what ${referenceText ? 'the guidance' : 'that standard'} requires. State facts only: do not recommend improvements or optional additions. If nothing needs raising, say plainly that there is nothing to raise.
 ${findingsInstruction}
 
 Read the whole document before deciding something is missing: it may be covered in a later section.
@@ -239,8 +240,7 @@ ${documentText}${truncated ? '\n\n[The document continues beyond this point but 
       status: statuses.get(i + 1) === 'resolved' ? 'resolved' : 'open',
     }))
 
-    // On a re-check only new "missing" findings are kept
-    const newGaps = normaliseGaps(parsed.gaps).filter(g => !isRecheck || gapLevel(g) === 'missing')
+    const newGaps = normaliseGaps(parsed.gaps)
 
     const review: AiReview = {
       standard,
