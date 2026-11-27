@@ -18,6 +18,7 @@ export default function CqcGapList({ gaps, references = [], size = 'sm', onDecid
 
   const groups = [
     { title: 'Missing or inadequate', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === 'missing'), heading: 'text-red-700', item: 'text-red-900' },
+    { title: 'Picked up at other practices', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === 'inspection'), heading: 'text-amber-700', item: 'text-gray-800' },
     { title: 'Gaps flagged', items: indexed.filter(g => g.status === 'open' && gapLevel(g.gap) === null), heading: 'text-blue-800', item: 'text-blue-900' },
     { title: 'Fixed since the last check', items: indexed.filter(g => g.status === 'resolved'), heading: 'text-green-700', item: 'text-gray-500' },
     { title: 'Closed by a manager', items: indexed.filter(g => g.status === 'not_adopted' || g.status === 'already_covered'), heading: 'text-gray-500', item: 'text-gray-500' },
@@ -32,11 +33,15 @@ export default function CqcGapList({ gaps, references = [], size = 'sm', onDecid
   const buttonClass = 'text-[11px] font-semibold px-2 py-0.5 rounded-full border disabled:opacity-50'
 
   const nothingToRaise = !gaps.some(isRaised)
+  const nothingMissing = !nothingToRaise && !gaps.some(g => isRaised(g) && gapLevel(g) !== 'inspection')
 
   return (
     <div className="space-y-2">
       {nothingToRaise && (
         <p className={`${text} font-semibold text-green-700`}>✓ Nothing to raise: no missing or inadequate content found.</p>
+      )}
+      {nothingMissing && (
+        <p className={`${text} font-semibold text-green-700`}>✓ No missing or inadequate content found.</p>
       )}
       {groups.map(group => (
         <div key={group.title}>

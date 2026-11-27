@@ -7,6 +7,7 @@ import { CQC_FUNDAMENTAL_STANDARDS } from '@/lib/cqcStandards'
 import { OTHER_REFERENCE_SOURCES } from '@/lib/practiceAreas'
 import PolicyHubNav from '@/components/PolicyHubNav'
 import { logAction } from '@/lib/audit'
+import CqcReportThemes from '@/components/CqcReportThemes'
 
 type ReferenceDoc = {
   id: string
@@ -330,6 +331,8 @@ export default function CqcStandardsReference() {
             </>
           )}
         </div>
+
+        <CqcReportThemes isManager={isManager} />
 
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-3">
           <div>

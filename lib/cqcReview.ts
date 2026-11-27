@@ -1,6 +1,9 @@
 // Result of the AI CQC check, as saved in documents.ai_review / audits.ai_review.
 // Checks run before gaps were labelled saved them as plain strings.
-export type GapLevel = 'missing' | 'suggestion'
+// missing: required by the guidance or law and absent or inadequate.
+// inspection: something CQC inspectors picked up on at other practices that this policy lacks.
+// suggestion: optional good practice (older checks only; no longer shown).
+export type GapLevel = 'missing' | 'inspection' | 'suggestion'
 
 // open: still to act on. resolved: a re-check found it fixed.
 // not_adopted / already_covered: a manager closed it, so later checks don't raise it again.
@@ -62,20 +65,27 @@ export function isRaised(gap: ReviewGap) {
   return isOpen(gap) && gapLevel(gap) !== 'suggestion'
 }
 
-// e.g. "2 missing", or "3 gaps flagged" for older checks. Open findings only.
+// Open findings picked up at other practices
+export function inspectionCount(gaps: ReviewGap[]) {
+  return gaps.filter(g => isOpen(g) && gapLevel(g) === 'inspection').length
+}
+
+// e.g. "2 missing · 1 picked up elsewhere", or "3 gaps flagged" for older checks. Open findings only.
 export function gapSummary(gaps: ReviewGap[]) {
   const open = gaps.filter(isRaised)
   const missing = open.filter(g => gapLevel(g) === 'missing').length
-  const unlabelled = open.length - missing
+  const inspection = inspectionCount(gaps)
+  const unlabelled = open.length - missing - inspection
   const parts = []
   if (missing) parts.push(`${missing} missing`)
   if (unlabelled) parts.push(`${unlabelled} gap${unlabelled !== 1 ? 's' : ''} flagged`)
+  if (inspection) parts.push(`${inspection} picked up elsewhere`)
   return parts.join(' · ')
 }
 
-// True when an open finding is (or may be) a definite gap
+// True when an open finding is (or may be) a definite gap: required and missing or inadequate
 export function hasMissing(gaps: ReviewGap[]) {
-  return gaps.some(isRaised)
+  return gaps.some(g => isRaised(g) && gapLevel(g) !== 'inspection')
 }
 
 // The badge shown on a policy or audit card
@@ -89,7 +99,10 @@ export function reviewBadge(review: AiReview): { label: string; className: strin
   if (hasMissing(review.gaps)) {
     return { label: `${gapSummary(review.gaps)} — view`, className: 'bg-red-100 text-red-700' }
   }
-  return { label: 'Meets guidance · nothing to raise', className: 'bg-green-100 text-green-700' }
+  const inspection = inspectionCount(review.gaps)
+  return inspection
+    ? { label: `Meets guidance · ${inspection} picked up elsewhere — view`, className: 'bg-amber-100 text-amber-800' }
+    : { label: 'Meets guidance · nothing to raise', className: 'bg-green-100 text-green-700' }
 }
 
 // Keeps the last review (and the manager's decisions) when a new version of the file is uploaded,

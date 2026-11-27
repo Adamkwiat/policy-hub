@@ -15,6 +15,7 @@ export type AuditAction =
   | 'delete_folder'
   | 'add_reference_website'
   | 'remove_reference_website'
+  | 'update_cqc_reports'
 
 export async function logAction({
   action,
